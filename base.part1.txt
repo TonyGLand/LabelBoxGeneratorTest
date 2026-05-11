@@ -3,14 +3,20 @@ const { useMemo, useState } = React;
 const DEFAULT_CORE_DIAMETER = 3.025;
 const DEFAULT_CALIPER_MIL = 5.8;
 const DEFAULT_CLEARANCE = 0.25;
-const DEFAULT_EXTRA_PERCENT = 3;
 const DEFAULT_LABEL_GAP = 0.25;
 const DEFAULT_CORE_HEIGHT_OVERHANG = 0.5;
 const DEFAULT_REPEAT_EDGE = "short";
+const DEFAULT_EXTRA_PERCENT = 5;
+const DEFAULT_PACKING_METHOD = "standard";
 
 const REPEAT_EDGE_LABELS = {
   short: "Short edge",
   long: "Long edge",
+};
+
+const PACKING_METHOD_LABELS = {
+  standard: "Standard grid",
+  offset: "Hex / offset rows",
 };
 
 const BOXES = [
@@ -51,20 +57,20 @@ const EMPTY_FORM = {
 
 const TEST_CASES = [
   {
-    name: "Short edge orientation uses the opposite edge as repeat length",
+    name: "Short edge becomes repeat length",
     item: { width: 4, height: 3.396, rolls: 2, labelsPerRoll: 500 },
-    expect: { repeat: 4, repeatPitch: 4.25, labelHeight: 3.396, rollHeight: 3.896, rolls: 2, labelsPerRoll: 500 },
+    expect: { repeat: 3.396, repeatPitch: 3.646, labelHeight: 4, rollHeight: 4.5, rolls: 2, labelsPerRoll: 500 },
   },
   {
-    name: "Tall/narrow label uses the opposite edge from orientation",
+    name: "Tall/narrow label still uses shorter edge as repeat",
     item: { width: 2, height: 3, rolls: 4, labelsPerRoll: 1000 },
-    expect: { repeat: 3, repeatPitch: 3.25, labelHeight: 2, rollHeight: 2.5, rolls: 4, labelsPerRoll: 1000 },
+    expect: { repeat: 2, repeatPitch: 2.25, labelHeight: 3, rollHeight: 3.5, rolls: 4, labelsPerRoll: 1000 },
   },
   {
-    name: "Long edge orientation uses the short edge as repeat length",
+    name: "Long edge can become repeat length",
     item: { width: 4, height: 3.396, rolls: 2, labelsPerRoll: 500 },
     repeatEdge: "long",
-    expect: { repeat: 3.396, repeatPitch: 3.646, labelHeight: 4, rollHeight: 4.5, rolls: 2, labelsPerRoll: 500 },
+    expect: { repeat: 4, repeatPitch: 4.25, labelHeight: 3.396, rollHeight: 3.896, rolls: 2, labelsPerRoll: 500 },
   },
   {
     name: "Rejects missing labels per roll",
@@ -165,3 +171,9 @@ function normalizeRollInput(item, repeatEdgeChoice = item.repeatEdge || DEFAULT_
   }
 
   if (!Number.isFinite(height) || height <= 0) {
+    return { raw: item, error: "Height must be a positive number." };
+  }
+
+  if (!Number.isFinite(rolls) || rolls <= 0) {
+    return { raw: item, error: "Number of rolls must be a positive number." };
+  }

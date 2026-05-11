@@ -1,34 +1,10 @@
-              <Badge good>{boxSetup.placedCount} roll(s)</Badge>
-            </div>
-            <div className="mt-1 text-xs text-slate-500">
-              Box size: {boxSetup.orientation.L} x {boxSetup.orientation.W} x {boxSetup.orientation.H}
-            </div>
-            <div className="mt-1 text-xs text-slate-500">Layers used: {boxSetup.layers.length}</div>
-            <div className="mt-2 space-y-1">
-              {boxSetup.layers.map((layer, layerIndex) => (
-                <div key={layerIndex} className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                  <span className="font-semibold text-slate-700">Layer {layerIndex + 1}:</span> {summarizeLayerRollLabels(layer.placed)}
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function LabelRollBoxCalculator() {
-  const [rollItems, setRollItems] = useState(SAMPLE_ROLLS);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [nextId, setNextId] = useState(4);
-  const [coreDiameter, setCoreDiameter] = useState(DEFAULT_CORE_DIAMETER);
-  const [caliperMil, setCaliperMil] = useState(DEFAULT_CALIPER_MIL);
   const [clearance, setClearance] = useState(DEFAULT_CLEARANCE);
   const [extraPercent, setExtraPercent] = useState(DEFAULT_EXTRA_PERCENT);
+  const [packingMethod, setPackingMethod] = useState(DEFAULT_PACKING_METHOD);
   const [repeatEdge, setRepeatEdge] = useState(DEFAULT_REPEAT_EDGE);
   const [selectedBoxIds, setSelectedBoxIds] = useState(DEFAULT_SELECTED_BOX_IDS);
   const [activeTab, setActiveTab] = useState("rolls");
+  const [showTests, setShowTests] = useState(false);
   const [formError, setFormError] = useState("");
 
   const result = useMemo(() => {
@@ -38,7 +14,7 @@ function LabelRollBoxCalculator() {
     const valid = parsed
       .filter((p) => !p.error)
       .map((p) => calculateRoll(p, Number(coreDiameter), Number(caliperMil), Number(clearance), Number(extraPercent)));
-    const packingPlan = valid.length ? buildMultiBoxPlan(valid, availableBoxes) : { boxes: [], unpacked: [] };
+    const packingPlan = valid.length ? buildMultiBoxPlan(valid, availableBoxes, packingMethod) : { boxes: [], unpacked: [] };
     const boxMix = summarizeBoxMix(packingPlan.boxes);
     const totalRolls = valid.reduce((sum, r) => sum + r.rolls, 0);
     const totalCylinderVolume = valid.reduce((sum, r) => sum + r.totalCylinderVolume, 0);
@@ -55,8 +31,10 @@ function LabelRollBoxCalculator() {
       totalCylinderVolume,
       totalBoundingVolume,
     };
-  }, [rollItems, coreDiameter, caliperMil, clearance, extraPercent, repeatEdge, selectedBoxIds]);
+  }, [rollItems, coreDiameter, caliperMil, clearance, extraPercent, packingMethod, repeatEdge, selectedBoxIds]);
 
+  const tests = useMemo(() => runTests(), []);
+  const testsPassed = tests.every((t) => t.passed);
 
   function updateForm(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -104,27 +82,88 @@ function LabelRollBoxCalculator() {
     setSelectedBoxIds([]);
   }
 
+  function resetSample() {
+    setRollItems(SAMPLE_ROLLS);
+    setForm(EMPTY_FORM);
+    setNextId(4);
+    setRepeatEdge(DEFAULT_REPEAT_EDGE);
+    setSelectedBoxIds(DEFAULT_SELECTED_BOX_IDS);
+    setActiveTab("rolls");
+    setFormError("");
+  }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-2 text-slate-900 md:p-3">
-      <div className="mx-auto max-w-none space-y-3">
-        <header className="rounded-2xl bg-white px-4 py-3 shadow-sm">
-          <div className="flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
-            <div>
-              <div className="text-sm font-semibold text-slate-500">Label Roll Box Calculator v1</div>
-              <h1 className="text-xl font-semibold tracking-tight md:text-2xl">Find the practical box plan for label rolls</h1>
+    <div className="min-h-screen bg-slate-50 p-4 text-slate-900 md:p-8">
+      <div className="mx-auto max-w-7xl space-y-6">
+        <header className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-sm shadow-sm">
+              <span>Label Roll Box Calculator v1</span>
             </div>
-            <p className="max-w-3xl text-xs text-slate-600 md:text-right">
-              Add roll groups, calculate diameters, then build a multi-box packing plan.
+            <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">Find the practical box plan for label rolls</h1>
+            <p className="mt-2 max-w-3xl text-slate-600">
+              Add one or more roll groups, calculate roll diameters from caliper, gap, core size, and repeat orientation, then build a multi-box packing plan.
             </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setShowTests((v) => !v)}
+              className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium shadow-sm hover:bg-slate-50"
+            >
+              {showTests ? "Hide tests" : "Show tests"}
+            </button>
+            <button
+              type="button"
+              onClick={resetSample}
+              className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium shadow-sm hover:bg-slate-50"
+            >
+              Reset sample
+            </button>
           </div>
         </header>
 
-        <div className="grid gap-3 xl:grid-cols-[minmax(420px,0.95fr)_minmax(0,1.25fr)]">
-          <div className="grid gap-3 xl:grid-rows-[350px_minmax(0,1fr)] xl:[height:min(68vh,720px)]">
-            <Panel className="p-3">
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <h2 className="text-lg font-semibold">Add roll group</h2>
+        {showTests && (
+          <Panel className="p-5">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold">Built-in test cases</h2>
+              <Badge good={testsPassed}>{testsPassed ? "All tests passed" : "Some tests failed"}</Badge>
+            </div>
+            <div className="space-y-2">
+              {tests.map((test) => (
+                <div key={test.name} className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium">{test.name}</span>
+                    <Badge good={test.passed}>{test.passed ? "Pass" : "Fail"}</Badge>
+                  </div>
+                  <div className="mt-1 font-mono text-xs text-slate-600">{test.details}</div>
+                </div>
+              ))}
+            </div>
+          </Panel>
+        )}
+
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_420px]">
+          <div className="min-w-0 space-y-6">
+            <Panel className="p-5">
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex rounded-2xl bg-slate-100 p-1">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("rolls")}
+                  className={`rounded-xl px-4 py-2 text-sm font-semibold ${activeTab === "rolls" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600 hover:text-slate-950"}`}
+                >
+                  Rolls
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("settings")}
+                  className={`rounded-xl px-4 py-2 text-sm font-semibold ${activeTab === "settings" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600 hover:text-slate-950"}`}
+                >
+                  Settings
+                </button>
+              </div>
+              {activeTab === "rolls" && (
                 <button
                   type="button"
                   onClick={clearRollItems}
@@ -132,36 +171,9 @@ function LabelRollBoxCalculator() {
                 >
                   Clear rolls
                 </button>
-              </div>
+              )}
+            </div>
 
-              <div className="grid gap-2.5 sm:grid-cols-2">
-                <NumberField label="Width, in" value={form.width} onChange={(v) => updateForm("width", v)} />
-                <NumberField label="Height, in" value={form.height} onChange={(v) => updateForm("height", v)} />
-                <NumberField label="# of rolls" value={form.rolls} onChange={(v) => updateForm("rolls", v)} step="1" />
-                <NumberField label="Labels / roll" value={form.labelsPerRoll} onChange={(v) => updateForm("labelsPerRoll", v)} step="1" />
-                <SelectField label="Orientation" value={repeatEdge} onChange={setRepeatEdge}>
-                  <option value="short">Short edge comes off</option>
-                  <option value="long">Long edge comes off</option>
-                </SelectField>
-              </div>
-
-              {formError && <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{formError}</div>}
-
-              <div className="mt-2 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={addRollItem}
-                  className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800"
-                >
-                  Add roll group
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setForm(EMPTY_FORM);
-                    setFormError("");
-                  }}
-                  className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium shadow-sm hover:bg-slate-50"
-                >
-                  Clear entry fields
-                </button>
+            {activeTab === "rolls" ? (
+              <div className="space-y-4">
+                <div className="text-lg font-semibold">Add roll group</div>
