@@ -38,3 +38,5 @@ Then visit:
 ```text
 http://localhost:5173
 ```
+
+> Deployment trigger update: 2026-05-11T23:27Z
