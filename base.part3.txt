@@ -65,6 +65,32 @@ function buildMultiBoxPlan(rollGroups, availableBoxes = BOXES, packingMethod = D
   return { boxes, unpacked: remaining };
 }
 
+
+function getPackingPlanScore(plan) {
+  const unpackedCount = plan.unpacked.length;
+  const boxCount = plan.boxes.length;
+  const totalBoxVolume = plan.boxes.reduce((sum, setup) => sum + (setup.box?.volume || 0), 0);
+  return { unpackedCount, boxCount, totalBoxVolume };
+}
+
+function chooseAutoPackingPlan(rollGroups, availableBoxes = BOXES) {
+  const standardPlan = buildMultiBoxPlan(rollGroups, availableBoxes, "standard");
+  const offsetPlan = buildMultiBoxPlan(rollGroups, availableBoxes, "offset");
+  const standardScore = getPackingPlanScore(standardPlan);
+  const offsetScore = getPackingPlanScore(offsetPlan);
+
+  const useStandard =
+    standardScore.unpackedCount < offsetScore.unpackedCount ||
+    (standardScore.unpackedCount === offsetScore.unpackedCount && standardScore.boxCount < offsetScore.boxCount) ||
+    (standardScore.unpackedCount === offsetScore.unpackedCount && standardScore.boxCount === offsetScore.boxCount && standardScore.totalBoxVolume <= offsetScore.totalBoxVolume);
+
+  const chosenPlan = useStandard ? standardPlan : offsetPlan;
+  return {
+    ...chosenPlan,
+    selectedPackingMethod: useStandard ? "standard" : "offset",
+  };
+}
+
 function summarizeBoxMix(boxes) {
   const counts = new Map();
   boxes.forEach((boxSetup) => {
@@ -130,7 +156,7 @@ function runTests() {
   });
 }
 
-function MultiBoxPackingDiagram({ packingPlan }) {
+function MultiBoxPackingDiagram({ packingPlan, packingMethod, onPackingMethodChange, activePackingMethod }) {
   const [boxIndex, setBoxIndex] = useState(0);
 
   if (!packingPlan || !packingPlan.boxes || packingPlan.boxes.length === 0) {
@@ -161,7 +187,17 @@ function MultiBoxPackingDiagram({ packingPlan }) {
       <div className="mb-2 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="text-lg font-semibold">2D packing view</h2>
+          <div className="mt-2 w-full max-w-xs">
+            <SelectField label="Packing method" value={packingMethod} onChange={onPackingMethodChange}>
+              <option value="best">Best fit (auto)</option>
+              <option value="standard">Standard grid</option>
+              <option value="offset">Hex / offset rows</option>
+            </SelectField>
+          </div>
           <p className="text-xs text-slate-600">Use the arrows to view each box setup. Dashed outlines show clearance; solid circles show the actual rolls.</p>
+          {packingMethod === "best" && (
+            <p className="mt-1 text-xs text-slate-500">Auto-selected method: {PACKING_METHOD_LABELS[activePackingMethod || DEFAULT_PACKING_METHOD]}</p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button

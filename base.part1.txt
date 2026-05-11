@@ -1,13 +1,13 @@
 const { useMemo, useState } = React;
 
 const DEFAULT_CORE_DIAMETER = 3.025;
-const DEFAULT_CALIPER_MIL = 5.8;
+const DEFAULT_CALIPER_MIL = 6.5;
 const DEFAULT_CLEARANCE = 0.25;
 const DEFAULT_EXTRA_PERCENT = 5;
 const DEFAULT_LABEL_GAP = 0.25;
 const DEFAULT_CORE_HEIGHT_OVERHANG = 0.5;
 const DEFAULT_REPEAT_EDGE = "short";
-const DEFAULT_PACKING_METHOD = "standard";
+const DEFAULT_PACKING_METHOD = "best";
 
 const REPEAT_EDGE_LABELS = {
   short: "Short edge",
@@ -15,6 +15,7 @@ const REPEAT_EDGE_LABELS = {
 };
 
 const PACKING_METHOD_LABELS = {
+  best: "Best fit (auto)",
   standard: "Standard grid",
   offset: "Hex / offset rows",
 };

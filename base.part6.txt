@@ -47,10 +47,6 @@
                       <NumberField label="Total caliper, mil" value={caliperMil} onChange={setCaliperMil} step="0.1" />
                       <NumberField label="Clearance, in" value={clearance} onChange={setClearance} step="0.05" />
                       <NumberField label="Extra amount, %" value={extraPercent} onChange={setExtraPercent} step="0.1" />
-                      <SelectField label="Packing method" value={packingMethod} onChange={setPackingMethod}>
-                        <option value="standard">Standard grid</option>
-                        <option value="offset">Hex / offset rows</option>
-                      </SelectField>
                     </div>
 
                     <div className="space-y-3">
@@ -87,7 +83,12 @@
           </div>
 
           <div className="min-w-0 xl:[height:min(68vh,720px)]">
-            <MultiBoxPackingDiagram packingPlan={result.packingPlan} />
+            <MultiBoxPackingDiagram
+              packingPlan={result.packingPlan}
+              packingMethod={packingMethod}
+              onPackingMethodChange={setPackingMethod}
+              activePackingMethod={result.activePackingMethod}
+            />
           </div>
         </div>
 
