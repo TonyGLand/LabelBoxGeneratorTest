@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Label Roll Box Calculator</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body>
+    <noscript>This calculator needs JavaScript enabled.</noscript>
+    <div id="root">
+      <div class="min-h-screen bg-slate-50 p-8 text-slate-700">Loading calculator...</div>
+    </div>
+
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script>
+      const sourceFiles = [
+        "base.part1.txt",
+        "base.part2.txt",
+        "base.part3.txt",
+        "base.part4.txt",
+        "base.part5.txt",
+        "base.part6.txt"
+      ];
+
+      Promise.all(
+        sourceFiles.map((file) =>
+          fetch(file, { cache: "no-store" }).then((response) => {
+            if (!response.ok) {
+              throw new Error(`Could not load ${file}`);
+            }
+            return response.text();
+          })
+        )
+      )
+        .then((parts) => {
+          const source = parts.join("\n");
+          const output = Babel.transform(source, {
+            presets: ["env", "react"],
+            filename: "base.js"
+          }).code;
+          (0, eval)(output);
+        })
+        .catch((error) => {
+          const root = document.getElementById("root");
+          root.innerHTML = `<div class="min-h-screen bg-slate-50 p-8 text-red-700">Could not load calculator: ${error.message}</div>`;
+          console.error(error);
+        });
+    </script>
+  </body>
+</html>

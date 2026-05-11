@@ -1,0 +1,167 @@
+const { useMemo, useState } = React;
+
+const DEFAULT_CORE_DIAMETER = 3.025;
+const DEFAULT_CALIPER_MIL = 5.8;
+const DEFAULT_CLEARANCE = 0.25;
+const DEFAULT_EXTRA_PERCENT = 3;
+const DEFAULT_LABEL_GAP = 0.25;
+const DEFAULT_CORE_HEIGHT_OVERHANG = 0.5;
+const DEFAULT_REPEAT_EDGE = "short";
+
+const REPEAT_EDGE_LABELS = {
+  short: "Short edge",
+  long: "Long edge",
+};
+
+const BOXES = [
+  [5, 5, 4],
+  [7, 7, 5],
+  [10, 5, 5],
+  [16, 6, 4],
+  [10, 10, 5],
+  [8, 8, 8],
+  [15, 10, 4],
+  [15, 10, 8],
+  [15, 12, 10],
+  [24, 16, 8],
+  [24, 16, 12],
+].map(([l, w, h], index) => ({
+  id: `${l}x${w}x${h}-${index}`,
+  name: `${l} x ${w} x ${h}`,
+  l,
+  w,
+  h,
+  volume: l * w * h,
+}));
+
+const DEFAULT_SELECTED_BOX_IDS = BOXES.map((box) => box.id);
+
+const SAMPLE_ROLLS = [
+  { id: 1, width: 4, height: 3.396, rolls: 2, labelsPerRoll: 500 },
+  { id: 2, width: 3, height: 2, rolls: 4, labelsPerRoll: 1000 },
+  { id: 3, width: 6, height: 4, rolls: 1, labelsPerRoll: 250 },
+];
+
+const EMPTY_FORM = {
+  width: "",
+  height: "",
+  rolls: "",
+  labelsPerRoll: "",
+};
+
+const TEST_CASES = [
+  {
+    name: "Short edge orientation uses the opposite edge as repeat length",
+    item: { width: 4, height: 3.396, rolls: 2, labelsPerRoll: 500 },
+    expect: { repeat: 4, repeatPitch: 4.25, labelHeight: 3.396, rollHeight: 3.896, rolls: 2, labelsPerRoll: 500 },
+  },
+  {
+    name: "Tall/narrow label uses the opposite edge from orientation",
+    item: { width: 2, height: 3, rolls: 4, labelsPerRoll: 1000 },
+    expect: { repeat: 3, repeatPitch: 3.25, labelHeight: 2, rollHeight: 2.5, rolls: 4, labelsPerRoll: 1000 },
+  },
+  {
+    name: "Long edge orientation uses the short edge as repeat length",
+    item: { width: 4, height: 3.396, rolls: 2, labelsPerRoll: 500 },
+    repeatEdge: "long",
+    expect: { repeat: 3.396, repeatPitch: 3.646, labelHeight: 4, rollHeight: 4.5, rolls: 2, labelsPerRoll: 500 },
+  },
+  {
+    name: "Rejects missing labels per roll",
+    item: { width: 4, height: 6, rolls: 1, labelsPerRoll: "" },
+    expectError: true,
+  },
+  {
+    name: "Rejects zero rolls",
+    item: { width: 4, height: 6, rolls: 0, labelsPerRoll: 500 },
+    expectError: true,
+  },
+  {
+    name: "Large order produces a multi-box plan",
+    item: { width: 4, height: 3.396, rolls: 40, labelsPerRoll: 500 },
+    expectPackingPlan: true,
+  },
+];
+
+function formatNumber(n, digits = 2) {
+  if (!Number.isFinite(n)) return "--";
+  return n.toLocaleString(undefined, {
+    maximumFractionDigits: digits,
+    minimumFractionDigits: digits,
+  });
+}
+
+function Panel({ children, className = "" }) {
+  return <div className={`rounded-2xl border border-slate-200 bg-white shadow-sm ${className}`}>{children}</div>;
+}
+
+function Badge({ children, good = false, warn = false }) {
+  let className = "bg-slate-100 text-slate-700";
+  if (good) className = "bg-emerald-100 text-emerald-800";
+  if (warn) className = "bg-amber-100 text-amber-800";
+  return <span className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${className}`}>{children}</span>;
+}
+
+function NumberField({ label, value, onChange, step = "0.001" }) {
+  return (
+    <label className="space-y-1">
+      <span className="text-sm font-medium">{label}</span>
+      <input
+        type="number"
+        step={step}
+        min="0"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 outline-none focus:border-slate-500"
+      />
+    </label>
+  );
+}
+
+function SelectField({ label, value, onChange, children }) {
+  return (
+    <label className="space-y-1">
+      <span className="text-sm font-medium">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 outline-none focus:border-slate-500"
+      >
+        {children}
+      </select>
+    </label>
+  );
+}
+
+function uniqueOrientations(box) {
+  const dims = [box.l, box.w, box.h];
+  const perms = [
+    [dims[0], dims[1], dims[2]],
+    [dims[0], dims[2], dims[1]],
+    [dims[1], dims[0], dims[2]],
+    [dims[1], dims[2], dims[0]],
+    [dims[2], dims[0], dims[1]],
+    [dims[2], dims[1], dims[0]],
+  ];
+
+  const seen = new Set();
+  return perms.filter((p) => {
+    const key = p.join("x");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function normalizeRollInput(item, repeatEdgeChoice = item.repeatEdge || DEFAULT_REPEAT_EDGE) {
+  const width = Number(item.width);
+  const height = Number(item.height);
+  const rolls = Number(item.rolls);
+  const labelsPerRoll = Number(String(item.labelsPerRoll).replace(/,/g, ""));
+  const repeatEdge = repeatEdgeChoice === "long" ? "long" : "short";
+
+  if (!Number.isFinite(width) || width <= 0) {
+    return { raw: item, error: "Width must be a positive number." };
+  }
+
+  if (!Number.isFinite(height) || height <= 0) {

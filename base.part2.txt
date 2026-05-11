@@ -1,0 +1,167 @@
+    return { raw: item, error: "Height must be a positive number." };
+  }
+
+  if (!Number.isFinite(rolls) || rolls <= 0) {
+    return { raw: item, error: "Number of rolls must be a positive number." };
+  }
+
+  if (!Number.isFinite(labelsPerRoll) || labelsPerRoll <= 0) {
+    return { raw: item, error: "Label quantity per roll must be a positive number." };
+  }
+
+  const shortEdge = Math.min(width, height);
+  const longEdge = Math.max(width, height);
+  const labelHeight = repeatEdge === "long" ? longEdge : shortEdge;
+  const repeat = repeatEdge === "long" ? shortEdge : longEdge;
+  const rollHeight = labelHeight + DEFAULT_CORE_HEIGHT_OVERHANG;
+  const repeatPitch = repeat + DEFAULT_LABEL_GAP;
+
+  return {
+    id: item.id,
+    width,
+    height,
+    dimA: width,
+    dimB: height,
+    repeatEdge,
+    repeatEdgeLabel: REPEAT_EDGE_LABELS[repeatEdge],
+    repeat,
+    repeatPitch,
+    labelGap: DEFAULT_LABEL_GAP,
+    labelHeight,
+    coreHeightOverhang: DEFAULT_CORE_HEIGHT_OVERHANG,
+    rollHeight,
+    rolls,
+    labelsPerRoll,
+    description: `${formatNumber(width)} x ${formatNumber(height)} - ${REPEAT_EDGE_LABELS[repeatEdge].toLowerCase()} orientation, ${rolls} roll${rolls === 1 ? "" : "s"}, ${labelsPerRoll.toLocaleString()} labels/roll`,
+  };
+}
+
+function calculateRoll(item, coreDiameter, caliperMil, clearance, extraPercent = DEFAULT_EXTRA_PERCENT) {
+  const safeCoreDiameter = Math.max(Number(coreDiameter) || DEFAULT_CORE_DIAMETER, 0.001);
+  const safeCaliperMil = Math.max(Number(caliperMil) || DEFAULT_CALIPER_MIL, 0.001);
+  const safeClearance = Math.max(Number(clearance) || 0, 0);
+  const safeExtraPercent = Math.max(Number(extraPercent) || 0, 0);
+  const caliperInches = safeCaliperMil / 1000;
+  const repeatPitch = item.repeatPitch || item.repeat + DEFAULT_LABEL_GAP;
+  const effectiveLabelsPerRoll = item.labelsPerRoll * (1 + safeExtraPercent / 100);
+  const woundLength = repeatPitch * effectiveLabelsPerRoll;
+  const outerDiameter = Math.sqrt(safeCoreDiameter ** 2 + (4 * woundLength * caliperInches) / Math.PI);
+  const effectiveDiameter = outerDiameter + safeClearance;
+  const effectiveHeight = item.rollHeight + safeClearance;
+  const cylinderVolume = Math.PI * (outerDiameter / 2) ** 2 * item.rollHeight;
+  const boundingVolume = effectiveDiameter * effectiveDiameter * effectiveHeight;
+
+  return {
+    ...item,
+    woundLength,
+    effectiveLabelsPerRoll,
+    extraPercent: safeExtraPercent,
+    outerDiameter,
+    effectiveDiameter,
+    effectiveHeight,
+    cylinderVolume,
+    boundingVolume,
+    totalCylinderVolume: cylinderVolume * item.rolls,
+    totalBoundingVolume: boundingVolume * item.rolls,
+  };
+}
+
+function expandRollInstances(rollGroups) {
+  const instances = [];
+  rollGroups.forEach((group, groupIndex) => {
+    for (let i = 0; i < group.rolls; i += 1) {
+      instances.push({
+        id: `${group.id || groupIndex}-${i}`,
+        groupId: group.id || groupIndex,
+        groupIndex,
+        label: getRollLabel(groupIndex, i),
+        diameter: group.effectiveDiameter,
+        actualDiameter: group.outerDiameter,
+        height: group.effectiveHeight,
+      });
+    }
+  });
+  return instances.sort((a, b) => b.diameter - a.diameter);
+}
+
+function packLayer(instances, orientation, remainingHeight) {
+  const placed = [];
+  const placedIds = new Set();
+  let cursorX = 0;
+  let cursorY = 0;
+  let rowHeight = 0;
+
+  for (const roll of instances) {
+    const d = roll.diameter;
+    if (roll.height > remainingHeight || d > orientation.L || d > orientation.W) continue;
+
+    if (cursorX + d > orientation.L) {
+      cursorX = 0;
+      cursorY += rowHeight;
+      rowHeight = 0;
+    }
+
+    if (cursorY + d <= orientation.W) {
+      placed.push({
+        ...roll,
+        x: cursorX + d / 2,
+        y: cursorY + d / 2,
+        r: d / 2,
+      });
+      placedIds.add(roll.id);
+      cursorX += d;
+      rowHeight = Math.max(rowHeight, d);
+    }
+  }
+
+  const remaining = instances.filter((roll) => !placedIds.has(roll.id));
+  const layerHeight = placed.length ? Math.max(...placed.map((roll) => roll.height)) : 0;
+  return { placed, remaining, layerHeight };
+}
+
+function packBox(instances, orientation) {
+  let remaining = [...instances];
+  let remainingHeight = orientation.H;
+  const layers = [];
+
+  while (remaining.length > 0 && remainingHeight > 0) {
+    const layer = packLayer(remaining, orientation, remainingHeight);
+    if (!layer.placed.length || layer.layerHeight <= 0 || layer.layerHeight > remainingHeight) break;
+    layers.push(layer);
+    remaining = layer.remaining;
+    remainingHeight -= layer.layerHeight;
+  }
+
+  const placedCount = layers.reduce((sum, layer) => sum + layer.placed.length, 0);
+  return {
+    orientation,
+    layers,
+    placedCount,
+    remaining,
+    topViewPlaced: layers[0]?.placed || [],
+  };
+}
+
+function chooseBestBoxForRemaining(instances, availableBoxes = BOXES) {
+  if (!instances.length) return null;
+  let best = null;
+
+  for (const box of availableBoxes) {
+    const orientation = { L: box.l, W: box.w, H: box.h, box };
+    const packed = packBox(instances, orientation);
+    if (packed.placedCount === 0) continue;
+
+    const candidate = {
+      box,
+      boxName: box.name,
+      orientation,
+      layers: packed.layers,
+      topViewPlaced: packed.topViewPlaced,
+      placedCount: packed.placedCount,
+      fillsAllRemaining: packed.placedCount === instances.length,
+      remaining: packed.remaining,
+    };
+
+    if (!best) {
+      best = candidate;
+      continue;

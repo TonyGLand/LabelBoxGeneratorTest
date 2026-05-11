@@ -1,0 +1,167 @@
+              <Badge good>{boxSetup.placedCount} roll(s)</Badge>
+            </div>
+            <div className="mt-1 text-xs text-slate-500">
+              Box size: {boxSetup.orientation.L} x {boxSetup.orientation.W} x {boxSetup.orientation.H}
+            </div>
+            <div className="mt-1 text-xs text-slate-500">Layers used: {boxSetup.layers.length}</div>
+            <div className="mt-2 space-y-1">
+              {boxSetup.layers.map((layer, layerIndex) => (
+                <div key={layerIndex} className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                  <span className="font-semibold text-slate-700">Layer {layerIndex + 1}:</span> {summarizeLayerRollLabels(layer.placed)}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LabelRollBoxCalculator() {
+  const [rollItems, setRollItems] = useState(SAMPLE_ROLLS);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [nextId, setNextId] = useState(4);
+  const [coreDiameter, setCoreDiameter] = useState(DEFAULT_CORE_DIAMETER);
+  const [caliperMil, setCaliperMil] = useState(DEFAULT_CALIPER_MIL);
+  const [clearance, setClearance] = useState(DEFAULT_CLEARANCE);
+  const [extraPercent, setExtraPercent] = useState(DEFAULT_EXTRA_PERCENT);
+  const [repeatEdge, setRepeatEdge] = useState(DEFAULT_REPEAT_EDGE);
+  const [selectedBoxIds, setSelectedBoxIds] = useState(DEFAULT_SELECTED_BOX_IDS);
+  const [activeTab, setActiveTab] = useState("rolls");
+  const [formError, setFormError] = useState("");
+
+  const result = useMemo(() => {
+    const availableBoxes = BOXES.filter((box) => selectedBoxIds.includes(box.id));
+    const parsed = rollItems.map((item) => normalizeRollInput(item, repeatEdge)).filter(Boolean);
+    const errors = parsed.filter((p) => p.error);
+    const valid = parsed
+      .filter((p) => !p.error)
+      .map((p) => calculateRoll(p, Number(coreDiameter), Number(caliperMil), Number(clearance), Number(extraPercent)));
+    const packingPlan = valid.length ? buildMultiBoxPlan(valid, availableBoxes) : { boxes: [], unpacked: [] };
+    const boxMix = summarizeBoxMix(packingPlan.boxes);
+    const totalRolls = valid.reduce((sum, r) => sum + r.rolls, 0);
+    const totalCylinderVolume = valid.reduce((sum, r) => sum + r.totalCylinderVolume, 0);
+    const totalBoundingVolume = valid.reduce((sum, r) => sum + r.totalBoundingVolume, 0);
+
+    return {
+      parsed,
+      errors,
+      valid,
+      packingPlan,
+      boxMix,
+      availableBoxes,
+      totalRolls,
+      totalCylinderVolume,
+      totalBoundingVolume,
+    };
+  }, [rollItems, coreDiameter, caliperMil, clearance, extraPercent, repeatEdge, selectedBoxIds]);
+
+
+  function updateForm(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+    setFormError("");
+  }
+
+  function addRollItem() {
+    const item = { id: nextId, ...form };
+    const normalized = normalizeRollInput(item, repeatEdge);
+    if (normalized.error) {
+      setFormError(normalized.error);
+      return;
+    }
+
+    setRollItems((current) => [...current, item]);
+    setNextId((id) => id + 1);
+    setForm(EMPTY_FORM);
+    setFormError("");
+  }
+
+  function removeRollItem(id) {
+    setRollItems((current) => current.filter((item) => item.id !== id));
+  }
+
+  function clearRollItems() {
+    setRollItems([]);
+    setForm(EMPTY_FORM);
+    setFormError("");
+  }
+
+  function toggleBoxSelection(boxId) {
+    setSelectedBoxIds((current) => {
+      if (current.includes(boxId)) {
+        return current.filter((id) => id !== boxId);
+      }
+      return [...current, boxId];
+    });
+  }
+
+  function selectAllBoxes() {
+    setSelectedBoxIds(DEFAULT_SELECTED_BOX_IDS);
+  }
+
+  function clearBoxSelection() {
+    setSelectedBoxIds([]);
+  }
+
+
+  return (
+    <div className="min-h-screen bg-slate-50 p-2 text-slate-900 md:p-3">
+      <div className="mx-auto max-w-none space-y-3">
+        <header className="rounded-2xl bg-white px-4 py-3 shadow-sm">
+          <div className="flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
+            <div>
+              <div className="text-sm font-semibold text-slate-500">Label Roll Box Calculator v1</div>
+              <h1 className="text-xl font-semibold tracking-tight md:text-2xl">Find the practical box plan for label rolls</h1>
+            </div>
+            <p className="max-w-3xl text-xs text-slate-600 md:text-right">
+              Add roll groups, calculate diameters, then build a multi-box packing plan.
+            </p>
+          </div>
+        </header>
+
+        <div className="grid gap-3 xl:grid-cols-[minmax(420px,0.95fr)_minmax(0,1.25fr)]">
+          <div className="grid gap-3 xl:grid-rows-[350px_minmax(0,1fr)] xl:[height:min(68vh,720px)]">
+            <Panel className="p-3">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold">Add roll group</h2>
+                <button
+                  type="button"
+                  onClick={clearRollItems}
+                  className="rounded-2xl border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+                >
+                  Clear rolls
+                </button>
+              </div>
+
+              <div className="grid gap-2.5 sm:grid-cols-2">
+                <NumberField label="Width, in" value={form.width} onChange={(v) => updateForm("width", v)} />
+                <NumberField label="Height, in" value={form.height} onChange={(v) => updateForm("height", v)} />
+                <NumberField label="# of rolls" value={form.rolls} onChange={(v) => updateForm("rolls", v)} step="1" />
+                <NumberField label="Labels / roll" value={form.labelsPerRoll} onChange={(v) => updateForm("labelsPerRoll", v)} step="1" />
+                <SelectField label="Orientation" value={repeatEdge} onChange={setRepeatEdge}>
+                  <option value="short">Short edge comes off</option>
+                  <option value="long">Long edge comes off</option>
+                </SelectField>
+              </div>
+
+              {formError && <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{formError}</div>}
+
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={addRollItem}
+                  className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800"
+                >
+                  Add roll group
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForm(EMPTY_FORM);
+                    setFormError("");
+                  }}
+                  className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium shadow-sm hover:bg-slate-50"
+                >
+                  Clear entry fields
+                </button>
