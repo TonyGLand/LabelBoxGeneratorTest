@@ -1,30 +1,36 @@
-      const packed = packBox(instances, orientation, packingMethod);
-      if (packed.placedCount === 0) continue;
 
-      const candidate = {
-        box,
-        boxName: box.name,
-        orientation,
-        layers: packed.layers,
-        topViewPlaced: packed.topViewPlaced,
-        placedCount: packed.placedCount,
-        fillsAllRemaining: packed.placedCount === instances.length,
-        remaining: packed.remaining,
-        packingMethod,
-      };
+function chooseBestBoxForRemaining(instances, availableBoxes = BOXES, packingMethod = DEFAULT_PACKING_METHOD) {
+  if (!instances.length) return null;
+  let best = null;
 
-      if (!best) {
-        best = candidate;
-        continue;
-      }
+  for (const box of availableBoxes) {
+    const orientation = { L: box.l, W: box.w, H: box.h, box };
+    const packed = packBox(instances, orientation, packingMethod);
+    if (packed.placedCount === 0) continue;
 
-      const better =
-        (candidate.fillsAllRemaining && !best.fillsAllRemaining) ||
-        candidate.placedCount > best.placedCount ||
-        (candidate.placedCount === best.placedCount && candidate.box.volume < best.box.volume);
+    const candidate = {
+      box,
+      boxName: box.name,
+      orientation,
+      layers: packed.layers,
+      topViewPlaced: packed.topViewPlaced,
+      placedCount: packed.placedCount,
+      fillsAllRemaining: packed.placedCount === instances.length,
+      remaining: packed.remaining,
+      packingMethod: packed.packingMethod,
+    };
 
-      if (better) best = candidate;
+    if (!best) {
+      best = candidate;
+      continue;
     }
+
+    const better =
+      (candidate.fillsAllRemaining && !best.fillsAllRemaining) ||
+      candidate.placedCount > best.placedCount ||
+      (candidate.placedCount === best.placedCount && candidate.box.volume < best.box.volume);
+
+    if (better) best = candidate;
   }
 
   return best;
@@ -68,13 +74,15 @@ function summarizeBoxMix(boxes) {
   return Array.from(counts.entries()).map(([boxName, count]) => ({ boxName, count }));
 }
 
-function getRollLabel(groupIndex, rollIndex) {
-  return `${groupIndex + 1}.${rollIndex + 1}`;
-}
+function summarizeLayerRollLabels(rolls) {
+  const counts = new Map();
+  rolls.forEach((roll) => {
+    counts.set(roll.label, (counts.get(roll.label) || 0) + 1);
+  });
 
-function getRollLabelRange(groupIndex, rollCount) {
-  if (rollCount <= 1) return getRollLabel(groupIndex, 0);
-  return `${getRollLabel(groupIndex, 0)}-${getRollLabel(groupIndex, rollCount - 1)}`;
+  return Array.from(counts.entries())
+    .map(([label, count]) => (count === 1 ? label : `${label} (${count})`))
+    .join(", ");
 }
 
 function runTests() {
@@ -93,8 +101,8 @@ function runTests() {
       if (!parsed || parsed.error) {
         return { name: test.name, passed: false, details: parsed?.error || "Could not parse test row." };
       }
-      const calculated = calculateRoll(parsed, DEFAULT_CORE_DIAMETER, DEFAULT_CALIPER_MIL, DEFAULT_CLEARANCE);
-      const plan = buildMultiBoxPlan([calculated]);
+      const calculated = calculateRoll(parsed, DEFAULT_CORE_DIAMETER, DEFAULT_CALIPER_MIL, DEFAULT_CLEARANCE, DEFAULT_EXTRA_PERCENT);
+      const plan = buildMultiBoxPlan([calculated], BOXES, DEFAULT_PACKING_METHOD);
       return {
         name: test.name,
         passed: plan.boxes.length > 0 && plan.unpacked.length === 0,
@@ -138,24 +146,22 @@ function MultiBoxPackingDiagram({ packingPlan }) {
   const current = packingPlan.boxes[safeIndex];
   const orientation = current.orientation;
   const placed = current.topViewPlaced || [];
-  const viewW = 520;
-  const viewH = Math.max(220, Math.round((orientation.W / orientation.L) * viewW));
+  const viewW = 820;
+  const viewH = Math.max(260, Math.round((orientation.W / orientation.L) * viewW));
   const scale = Math.min(viewW / orientation.L, viewH / orientation.W);
   const svgW = orientation.L * scale;
   const svgH = orientation.W * scale;
-  const rollsShown = placed.length;
-  const additionalRolls = Math.max(0, current.placedCount - rollsShown);
   const layerViewW = 170;
   const layerViewH = 220;
-  const layerScaleX = layerViewW / orientation.L;
   const layerScaleY = layerViewH / orientation.H;
+  const packingLabel = PACKING_METHOD_LABELS[current.packingMethod || DEFAULT_PACKING_METHOD] || PACKING_METHOD_LABELS[DEFAULT_PACKING_METHOD];
 
   return (
-    <Panel className="max-h-[760px] overflow-y-auto p-5">
-      <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+    <Panel className="flex h-full min-h-0 flex-col p-3">
+      <div className="mb-2 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="text-lg font-semibold">2D packing view</h2>
-          <p className="text-sm text-slate-600">Use the arrows to view each box setup. The final box may be partially filled.</p>
+          <p className="text-xs text-slate-600">Use the arrows to view each box setup. Dashed outlines show clearance; solid circles show the actual rolls.</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -165,15 +171,3 @@ function MultiBoxPackingDiagram({ packingPlan }) {
             className="rounded-xl border border-slate-300 px-3 py-1 text-sm disabled:opacity-40"
           >
             Prev
-          </button>
-          <Badge good>Box {safeIndex + 1} of {packingPlan.boxes.length}</Badge>
-          <button
-            type="button"
-            onClick={() => setBoxIndex((i) => Math.min(packingPlan.boxes.length - 1, i + 1))}
-            disabled={safeIndex === packingPlan.boxes.length - 1}
-            className="rounded-xl border border-slate-300 px-3 py-1 text-sm disabled:opacity-40"
-          >
-            Next
-          </button>
-        </div>
-      </div>
