@@ -49,7 +49,8 @@ function LabelRollBoxCalculator() {
     const valid = parsed
       .filter((p) => !p.error)
       .map((p) => calculateRoll(p, Number(coreDiameter), Number(caliperMil), Number(clearance), Number(extraPercent)));
-    const packingPlan = valid.length ? buildMultiBoxPlan(valid, availableBoxes, packingMethod) : { boxes: [], unpacked: [] };
+    const autoPlan = valid.length ? chooseAutoPackingPlan(valid, availableBoxes) : { boxes: [], unpacked: [], selectedPackingMethod: "standard" };
+    const packingPlan = valid.length ? (packingMethod === "best" ? autoPlan : buildMultiBoxPlan(valid, availableBoxes, packingMethod)) : { boxes: [], unpacked: [] };
     const boxMix = summarizeBoxMix(packingPlan.boxes);
     const totalRolls = valid.reduce((sum, r) => sum + r.rolls, 0);
     const totalCylinderVolume = valid.reduce((sum, r) => sum + r.totalCylinderVolume, 0);
@@ -61,6 +62,7 @@ function LabelRollBoxCalculator() {
       valid,
       packingPlan,
       boxMix,
+      activePackingMethod: packingMethod === "best" ? autoPlan.selectedPackingMethod : packingMethod,
       availableBoxes,
       totalRolls,
       totalCylinderVolume,
