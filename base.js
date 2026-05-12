@@ -501,6 +501,8 @@ function MultiBoxPackingDiagram({ packingPlan }) {
   const layerViewH = 220;
   const layerScaleY = layerViewH / orientation.H;
   const packingLabel = PACKING_METHOD_LABELS[current.packingMethod || DEFAULT_PACKING_METHOD] || PACKING_METHOD_LABELS[DEFAULT_PACKING_METHOD];
+  const usesPadSeparator =
+    current?.box?.l === 24 && current?.box?.w === 16 && (current?.box?.h === 8 || current?.box?.h === 12);
 
   return (
     <Panel className="flex h-full min-h-0 flex-col p-3">
@@ -613,6 +615,9 @@ function MultiBoxPackingDiagram({ packingPlan }) {
                       <text x={layerViewW / 2} y={Math.max(12, y + layerHeight / 2 + 4)} textAnchor="middle" className="fill-slate-700 text-[10px] font-semibold">
                         Layer {index + 1}: {layer.placed.length} roll{layer.placed.length === 1 ? "" : "s"}
                       </text>
+                      {usesPadSeparator && index < current.layers.length - 1 && (
+                        <line x1="8" y1={Math.max(0, y)} x2={layerViewW - 8} y2={Math.max(0, y)} stroke="black" strokeWidth="2" />
+                      )}
                     </g>
                   );
                 })}
