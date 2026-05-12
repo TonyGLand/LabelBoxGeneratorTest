@@ -38,6 +38,7 @@ function LabelRollBoxCalculator() {
   const [extraPercent, setExtraPercent] = useState(DEFAULT_EXTRA_PERCENT);
   const [packingMethod, setPackingMethod] = useState(DEFAULT_PACKING_METHOD);
   const [repeatEdge, setRepeatEdge] = useState(DEFAULT_REPEAT_EDGE);
+  const [rollOrientation, setRollOrientation] = useState("standing");
   const [selectedBoxIds, setSelectedBoxIds] = useState(DEFAULT_SELECTED_BOX_IDS);
   const [activeTab, setActiveTab] = useState("rolls");
   const [formError, setFormError] = useState("");
@@ -49,8 +50,8 @@ function LabelRollBoxCalculator() {
     const valid = parsed
       .filter((p) => !p.error)
       .map((p) => calculateRoll(p, Number(coreDiameter), Number(caliperMil), Number(clearance), Number(extraPercent)));
-    const autoPlan = valid.length ? chooseAutoPackingPlan(valid, availableBoxes) : { boxes: [], unpacked: [], selectedPackingMethod: "standard" };
-    const packingPlan = valid.length ? (packingMethod === "best" ? autoPlan : buildMultiBoxPlan(valid, availableBoxes, packingMethod)) : { boxes: [], unpacked: [] };
+    const autoPlan = valid.length ? chooseAutoPackingPlan(valid, availableBoxes, rollOrientation) : { boxes: [], unpacked: [], selectedPackingMethod: "standard" };
+    const packingPlan = valid.length ? (packingMethod === "best" ? autoPlan : buildMultiBoxPlan(valid, availableBoxes, packingMethod, rollOrientation)) : { boxes: [], unpacked: [] };
     const boxMix = summarizeBoxMix(packingPlan.boxes);
     const totalRolls = valid.reduce((sum, r) => sum + r.rolls, 0);
     const totalCylinderVolume = valid.reduce((sum, r) => sum + r.totalCylinderVolume, 0);
@@ -68,7 +69,7 @@ function LabelRollBoxCalculator() {
       totalCylinderVolume,
       totalBoundingVolume,
     };
-  }, [rollItems, coreDiameter, caliperMil, clearance, extraPercent, packingMethod, repeatEdge, selectedBoxIds]);
+  }, [rollItems, coreDiameter, caliperMil, clearance, extraPercent, packingMethod, repeatEdge, selectedBoxIds, rollOrientation]);
 
   function updateForm(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -126,7 +127,7 @@ function LabelRollBoxCalculator() {
               <h1 className="text-xl font-semibold tracking-tight md:text-2xl">Find the practical box plan for label rolls</h1>
             </div>
             <p className="max-w-3xl text-xs text-slate-600 md:text-right">
-              Add roll groups, calculate diameters, then build a multi-box packing plan.
+              Add roll groups by total labels, calculate diameters, then build a multi-box packing plan.
             </p>
           </div>
         </header>
@@ -149,7 +150,7 @@ function LabelRollBoxCalculator() {
                 <NumberField label="Width, in" value={form.width} onChange={(v) => updateForm("width", v)} />
                 <NumberField label="Height, in" value={form.height} onChange={(v) => updateForm("height", v)} />
                 <NumberField label="# of rolls" value={form.rolls} onChange={(v) => updateForm("rolls", v)} step="1" />
-                <NumberField label="Labels / roll" value={form.labelsPerRoll} onChange={(v) => updateForm("labelsPerRoll", v)} step="1" />
+                <NumberField label="Total labels" value={form.totalLabels} onChange={(v) => updateForm("totalLabels", v)} step="1" />
                 <SelectField label="Orientation" value={repeatEdge} onChange={setRepeatEdge}>
                   <option value="short">Short edge comes off</option>
                   <option value="long">Long edge comes off</option>

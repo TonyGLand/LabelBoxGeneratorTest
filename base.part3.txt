@@ -1,11 +1,11 @@
 
-function chooseBestBoxForRemaining(instances, availableBoxes = BOXES, packingMethod = DEFAULT_PACKING_METHOD) {
+function chooseBestBoxForRemaining(instances, availableBoxes = BOXES, packingMethod = DEFAULT_PACKING_METHOD, rollOrientation = "standing") {
   if (!instances.length) return null;
   let best = null;
 
   for (const box of availableBoxes) {
     const orientation = { L: box.l, W: box.w, H: box.h, box };
-    const packed = packBox(instances, orientation, packingMethod);
+    const packed = packBox(instances, orientation, packingMethod, rollOrientation);
     if (packed.placedCount === 0) continue;
 
     const candidate = {
@@ -36,14 +36,14 @@ function chooseBestBoxForRemaining(instances, availableBoxes = BOXES, packingMet
   return best;
 }
 
-function buildMultiBoxPlan(rollGroups, availableBoxes = BOXES, packingMethod = DEFAULT_PACKING_METHOD) {
+function buildMultiBoxPlan(rollGroups, availableBoxes = BOXES, packingMethod = DEFAULT_PACKING_METHOD, rollOrientation = "standing") {
   let remaining = expandRollInstances(rollGroups);
   const boxes = [];
   let guard = 0;
 
   while (remaining.length > 0 && guard < 200) {
     guard += 1;
-    const best = chooseBestBoxForRemaining(remaining, availableBoxes, packingMethod);
+    const best = chooseBestBoxForRemaining(remaining, availableBoxes, packingMethod, rollOrientation);
 
     if (!best || best.placedCount === 0) {
       return { boxes, unpacked: remaining };
@@ -73,9 +73,9 @@ function getPackingPlanScore(plan) {
   return { unpackedCount, boxCount, totalBoxVolume };
 }
 
-function chooseAutoPackingPlan(rollGroups, availableBoxes = BOXES) {
-  const standardPlan = buildMultiBoxPlan(rollGroups, availableBoxes, "standard");
-  const offsetPlan = buildMultiBoxPlan(rollGroups, availableBoxes, "offset");
+function chooseAutoPackingPlan(rollGroups, availableBoxes = BOXES, rollOrientation = "standing") {
+  const standardPlan = buildMultiBoxPlan(rollGroups, availableBoxes, "standard", rollOrientation);
+  const offsetPlan = buildMultiBoxPlan(rollGroups, availableBoxes, "offset", rollOrientation);
   const standardScore = getPackingPlanScore(standardPlan);
   const offsetScore = getPackingPlanScore(offsetPlan);
 
@@ -156,7 +156,7 @@ function runTests() {
   });
 }
 
-function MultiBoxPackingDiagram({ packingPlan, packingMethod, onPackingMethodChange, activePackingMethod }) {
+function MultiBoxPackingDiagram({ packingPlan, packingMethod, onPackingMethodChange, activePackingMethod, rollOrientation, onRollOrientationChange }) {
   const [boxIndex, setBoxIndex] = useState(0);
 
   if (!packingPlan || !packingPlan.boxes || packingPlan.boxes.length === 0) {
@@ -194,7 +194,7 @@ function MultiBoxPackingDiagram({ packingPlan, packingMethod, onPackingMethodCha
               <option value="offset">Hex / offset rows</option>
             </SelectField>
           </div>
-          <p className="text-xs text-slate-600">Use the arrows to view each box setup. Dashed outlines show clearance; solid circles show the actual rolls.</p>
+          <div className="mt-2 w-full max-w-xs"><SelectField label="Roll orientation" value={rollOrientation} onChange={onRollOrientationChange}><option value="standing">Standing</option><option value="flat">Flat (sideways)</option></SelectField></div><p className="text-xs text-slate-600">Use the arrows to view each box setup. Dashed outlines show clearance; solid shapes show the actual rolls.</p>
           {packingMethod === "best" && (
             <p className="mt-1 text-xs text-slate-500">Auto-selected method: {PACKING_METHOD_LABELS[activePackingMethod || DEFAULT_PACKING_METHOD]}</p>
           )}
