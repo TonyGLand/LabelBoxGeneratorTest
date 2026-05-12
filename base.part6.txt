@@ -5,80 +5,14 @@
             </Panel>
 
             <Panel className="flex min-h-0 flex-col p-3">
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex rounded-2xl bg-slate-100 p-1">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab("rolls")}
-                    className={`rounded-xl px-4 py-2 text-sm font-semibold ${activeTab === "rolls" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600 hover:text-slate-950"}`}
-                  >
-                    Roll calculations
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab("settings")}
-                    className={`rounded-xl px-4 py-2 text-sm font-semibold ${activeTab === "settings" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600 hover:text-slate-950"}`}
-                  >
-                    Settings
-                  </button>
-                </div>
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold">Roll calculations</h2>
+                <button type="button" onClick={() => setShowSettings((current) => !current)} className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-700 hover:bg-slate-50">⚙</button>
               </div>
-
-              {activeTab === "rolls" ? (
-                <div className="flex min-h-0 flex-1 flex-col space-y-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <h2 className="text-lg font-semibold">Roll calculations</h2>
-                    {result.valid.length > 0 && <Badge good>{result.valid.length} group{result.valid.length === 1 ? "" : "s"}</Badge>}
-                  </div>
-                  <div className="min-h-0 flex-1">
-                    <RollCalculationsTable rolls={result.valid} onRemove={removeRollItem} />
-                  </div>
-                </div>
-              ) : (
-                <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-                  <div className="space-y-5">
-                    <div>
-                      <h2 className="text-lg font-semibold">Settings</h2>
-                      <p className="mt-1 text-sm text-slate-600">These values apply to every roll group in the current order.</p>
-                    </div>
-
-                    <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5">
-                      <NumberField label="Core diameter, in" value={coreDiameter} onChange={setCoreDiameter} step="0.001" />
-                      <NumberField label="Total caliper, mil" value={caliperMil} onChange={setCaliperMil} step="0.1" />
-                      <NumberField label="Clearance, in" value={clearance} onChange={setClearance} step="0.05" />
-                      <NumberField label="Extra amount, %" value={extraPercent} onChange={setExtraPercent} step="0.1" />
-                    </div>
-
-                    <div className="space-y-3">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div>
-                          <h3 className="font-semibold">Allowed box sizes</h3>
-                          <p className="mt-1 text-sm text-slate-600">Select one or more box sizes the order can use.</p>
-                        </div>
-                        <div className="flex gap-2">
-                          <button type="button" onClick={selectAllBoxes} className="rounded-xl border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">Select all</button>
-                          <button type="button" onClick={clearBoxSelection} className="rounded-xl border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">Clear</button>
-                        </div>
-                      </div>
-                      <div className="max-h-[280px] overflow-y-auto rounded-2xl border bg-white p-3">
-                        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                          {BOXES.map((box) => (
-                            <label key={box.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2 text-sm">
-                              <span>{box.name}</span>
-                              <input
-                                type="checkbox"
-                                checked={selectedBoxIds.includes(box.id)}
-                                onChange={() => toggleBoxSelection(box.id)}
-                                className="h-4 w-4 accent-slate-900"
-                              />
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+              {showSettings && <div className="mb-3 text-sm text-slate-600">Use the gear settings panel in the header.</div>}
+              <div className="min-h-0 flex-1">
+                <RollCalculationsTable rolls={result.valid} onRemove={removeRollItem} />
+              </div>
             </Panel>
           </div>
 
@@ -114,11 +48,11 @@
           <div className="grid gap-3 xl:grid-cols-[360px_minmax(0,1fr)]">
             <div className="space-y-3">
               {result.valid.length === 0 ? (
-                <div className="rounded-2xl bg-slate-100 p-4 text-slate-600">Add at least one valid roll group.</div>
+                <div className="rounded-2xl bg-slate-100 p-4 text-slate-600">Add at least one valid roll item.</div>
               ) : result.availableBoxes.length === 0 ? (
                 <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900">
                   <div className="font-semibold">Select at least one box size.</div>
-                  <div className="mt-2 text-sm">Open Settings and choose the box sizes this order can use.</div>
+                  <div className="mt-2 text-sm">Open the gear settings and choose the box sizes this order can use.</div>
                 </div>
               ) : result.packingPlan.boxes.length > 0 ? (
                 <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
@@ -161,7 +95,7 @@
             <div className="min-w-0 space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-lg font-semibold">Box summary</h2>
-                {result.packingPlan.boxes.length > 0 && <Badge good>{result.packingPlan.boxes.length} box{result.packingPlan.boxes.length === 1 ? "" : "es"}</Badge>}
+                
               </div>
               <BoxSummary packingPlan={result.packingPlan} />
             </div>

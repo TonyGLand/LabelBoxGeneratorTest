@@ -121,31 +121,31 @@ function RollCalculationsTable({ rolls, onRemove }) {
   return (
     <div className="h-full overflow-y-auto overflow-x-hidden rounded-2xl border bg-white">
       <table className="w-full table-fixed text-sm">
-        <thead className="sticky top-0 bg-slate-100 text-left text-xs uppercase tracking-wide text-slate-500">
+        <thead className="sticky top-0 bg-slate-100 text-xs uppercase tracking-wide text-slate-500">
           <tr>
-            <th className="p-3">Roll IDs</th>
-            <th className="p-3">Rolls</th>
-            <th className="p-3">Width</th>
-            <th className="p-3">Height</th>
-            <th className="p-3">Total labels</th>
-            <th className="p-3">Labels / roll</th>
-            <th className="p-3">Orientation</th>
-            <th className="p-3">Diameter</th>
-            <th className="p-3">Action</th>
+            <th className="p-3 text-center">Roll IDs</th>
+            <th className="p-3 text-center">Rolls</th>
+            <th className="p-3 text-center">Width</th>
+            <th className="p-3 text-center">Height</th>
+            <th className="p-3 text-center">Total labels</th>
+            <th className="p-3 text-center">Labels / roll</th>
+            <th className="p-3 text-center">Orientation</th>
+            <th className="p-3 text-center">Diameter</th>
+            <th className="p-3 text-center">Action</th>
           </tr>
         </thead>
         <tbody>
           {rolls.map((roll, groupIndex) => (
             <tr key={roll.id} className="border-t align-top">
-              <td className="break-words p-3 font-semibold text-slate-700">{getRollLabelRange(groupIndex, roll.rolls)}</td>
-              <td className="p-3">{roll.rolls}</td>
-              <td className="p-3">{formatNumber(roll.width)}&quot;</td>
-              <td className="p-3">{formatNumber(roll.height)}&quot;</td>
-              <td className="break-words p-3">{Math.round(roll.totalLabels).toLocaleString()}</td>
-              <td className="break-words p-3">{Math.round(roll.labelsPerRoll).toLocaleString()}</td>
-              <td className="break-words p-3">{roll.repeatEdgeLabel}</td>
-              <td className="p-3 font-semibold">{formatNumber(roll.outerDiameter)}&quot;</td>
-              <td className="p-3">
+              <td className="break-words p-3 text-center font-semibold text-slate-700">{getRollLabelRange(groupIndex, roll.rolls)}</td>
+              <td className="p-3 text-center">{roll.rolls}</td>
+              <td className="p-3 text-center">{formatNumber(roll.width)}&quot;</td>
+              <td className="p-3 text-center">{formatNumber(roll.height)}&quot;</td>
+              <td className="break-words p-3 text-center">{Math.round(roll.totalLabels || 0).toLocaleString()}</td>
+              <td className="break-words p-3 text-center">{Math.round(roll.labelsPerRoll).toLocaleString()}</td>
+              <td className="break-words p-3 text-center">{roll.repeatEdgeLabel}</td>
+              <td className="p-3 text-center font-semibold">{formatNumber(roll.outerDiameter)}&quot;</td>
+              <td className="p-3 text-center">
                 <button
                   type="button"
                   onClick={() => onRemove(roll.id)}
@@ -166,7 +166,7 @@ function BoxSummary({ packingPlan }) {
   if (!packingPlan || packingPlan.boxes.length === 0) {
     return (
       <div className="rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">
-        Box summary will appear after you add at least one roll group and select at least one box size.
+        Box summary will appear after you add at least one roll item and select at least one box size.
       </div>
     );
   }
