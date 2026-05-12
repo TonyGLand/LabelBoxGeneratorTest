@@ -22,9 +22,6 @@
               packingMethod={packingMethod}
               onPackingMethodChange={setPackingMethod}
               activePackingMethod={result.activePackingMethod}
-              rollOrientation={rollOrientation}
-              onRollOrientationChange={setRollOrientation}
-              activeRollOrientation={result.activeRollOrientation}
             />
           </div>
         </div>
