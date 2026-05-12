@@ -6,12 +6,12 @@ const DEFAULT_CLEARANCE = 0.25;
 const DEFAULT_EXTRA_PERCENT = 5;
 const DEFAULT_LABEL_GAP = 0.25;
 const DEFAULT_CORE_HEIGHT_OVERHANG = 0.5;
-const DEFAULT_REPEAT_EDGE = "short";
+const DEFAULT_REPEAT_EDGE = "sideways";
 const DEFAULT_PACKING_METHOD = "standard";
 
 const REPEAT_EDGE_LABELS = {
-  short: "Short edge",
-  long: "Long edge",
+  flat: "Flat",
+  sideways: "Sideways",
 };
 
 const PACKING_METHOD_LABELS = {
@@ -69,7 +69,7 @@ const TEST_CASES = [
   {
     name: "Long edge orientation uses the short edge as repeat length",
     item: { width: 4, height: 3.396, rolls: 2, labelsPerRoll: 500 },
-    repeatEdge: "long",
+    repeatEdge: "flat",
     expect: { repeat: 3.396, repeatPitch: 3.646, labelHeight: 4, rollHeight: 4.5, rolls: 2, labelsPerRoll: 500 },
   },
   {
@@ -144,7 +144,7 @@ function normalizeRollInput(item, repeatEdgeChoice = item.repeatEdge || DEFAULT_
   const height = Number(item.height);
   const rolls = Number(item.rolls);
   const labelsPerRoll = Number(String(item.labelsPerRoll).replace(/,/g, ""));
-  const repeatEdge = repeatEdgeChoice === "long" ? "long" : "short";
+  const repeatEdge = repeatEdgeChoice === "flat" || repeatEdgeChoice === "long" ? "flat" : "sideways";
 
   if (!Number.isFinite(width) || width <= 0) {
     return { raw: item, error: "Width must be a positive number." };
@@ -164,8 +164,8 @@ function normalizeRollInput(item, repeatEdgeChoice = item.repeatEdge || DEFAULT_
 
   const shortEdge = Math.min(width, height);
   const longEdge = Math.max(width, height);
-  const labelHeight = repeatEdge === "long" ? longEdge : shortEdge;
-  const repeat = repeatEdge === "long" ? shortEdge : longEdge;
+  const labelHeight = repeatEdge === "flat" ? longEdge : shortEdge;
+  const repeat = repeatEdge === "flat" ? shortEdge : longEdge;
   const rollHeight = labelHeight + DEFAULT_CORE_HEIGHT_OVERHANG;
   const repeatPitch = repeat + DEFAULT_LABEL_GAP;
 
@@ -557,19 +557,46 @@ function MultiBoxPackingDiagram({ packingPlan }) {
                     const clearanceR = roll.r * scale;
                     const actualR = (roll.actualDiameter / 2) * scale;
                     const labelFontSize = Math.max(10, Math.min(18, actualR * 0.6));
+                    const isSideways = roll.repeatEdge === "sideways";
                     return (
                       <g key={roll.id}>
-                        <circle
-                          cx={cx}
-                          cy={cy}
-                          r={clearanceR}
-                          fill="rgb(248 250 252)"
-                          stroke="rgb(203 213 225)"
-                          strokeWidth="1"
-                          strokeDasharray="4 3"
-                        />
-                        <circle cx={cx} cy={cy} r={actualR} fill="rgb(226 232 240)" stroke="rgb(51 65 85)" strokeWidth="1.35" />
-                        <circle cx={cx} cy={cy} r={Math.max(2, (DEFAULT_CORE_DIAMETER / 2) * scale)} fill="white" stroke="rgb(100 116 139)" strokeWidth="2.2" />
+                        {isSideways ? (
+                          <>
+                            <rect
+                              x={cx - clearanceR}
+                              y={cy - clearanceR}
+                              width={clearanceR * 2}
+                              height={clearanceR * 2}
+                              fill="rgb(248 250 252)"
+                              stroke="rgb(203 213 225)"
+                              strokeWidth="1"
+                              strokeDasharray="4 3"
+                            />
+                            <rect
+                              x={cx - actualR}
+                              y={cy - actualR}
+                              width={actualR * 2}
+                              height={actualR * 2}
+                              fill="rgb(226 232 240)"
+                              stroke="rgb(51 65 85)"
+                              strokeWidth="1.35"
+                            />
+                          </>
+                        ) : (
+                          <>
+                            <circle
+                              cx={cx}
+                              cy={cy}
+                              r={clearanceR}
+                              fill="rgb(248 250 252)"
+                              stroke="rgb(203 213 225)"
+                              strokeWidth="1"
+                              strokeDasharray="4 3"
+                            />
+                            <circle cx={cx} cy={cy} r={actualR} fill="rgb(226 232 240)" stroke="rgb(51 65 85)" strokeWidth="1.35" />
+                            <circle cx={cx} cy={cy} r={Math.max(2, (DEFAULT_CORE_DIAMETER / 2) * scale)} fill="white" stroke="rgb(100 116 139)" strokeWidth="2.2" />
+                          </>
+                        )}
                         <text
                           x={cx}
                           y={cy + labelFontSize * 0.32}
@@ -846,8 +873,8 @@ function LabelRollBoxCalculator() {
                 <NumberField label="# of rolls" value={form.rolls} onChange={(v) => updateForm("rolls", v)} step="1" />
                 <NumberField label="Labels / roll" value={form.labelsPerRoll} onChange={(v) => updateForm("labelsPerRoll", v)} step="1" />
                 <SelectField label="Orientation" value={repeatEdge} onChange={setRepeatEdge}>
-                  <option value="short">Short edge comes off</option>
-                  <option value="long">Long edge comes off</option>
+                  <option value="flat">Flat</option>
+                  <option value="sideways">Sideways</option>
                 </SelectField>
               </div>
 
