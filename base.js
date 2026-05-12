@@ -601,6 +601,13 @@ function MultiBoxPackingDiagram({ packingPlan }) {
                 {current.layers.map((layer, index) => {
                   const layerHeight = Math.max(layer.layerHeight * layerScaleY, 6);
                   const y = layerViewH - current.layers.slice(0, index + 1).reduce((sum, l) => sum + l.layerHeight * layerScaleY, 0);
+                  const rollCount = layer.placed.length;
+                  const laneWidth = layerViewW - 16;
+                  const maxCols = Math.max(1, Math.floor(laneWidth / 14));
+                  const rows = Math.max(1, Math.ceil(rollCount / maxCols));
+                  const colGap = laneWidth / Math.max(1, Math.min(rollCount, maxCols));
+                  const rowGap = layerHeight / rows;
+                  const circleRadius = Math.max(2.5, Math.min(6, Math.min(colGap, rowGap) * 0.35));
                   return (
                     <g key={index}>
                       <rect
@@ -612,6 +619,23 @@ function MultiBoxPackingDiagram({ packingPlan }) {
                         stroke="rgb(51 65 85)"
                         strokeWidth="1"
                       />
+                      {Array.from({ length: rollCount }).map((_, rollIndex) => {
+                        const col = rollIndex % maxCols;
+                        const row = Math.floor(rollIndex / maxCols);
+                        const cx = 8 + (col + 0.5) * colGap;
+                        const cy = Math.max(0, y) + (row + 0.5) * rowGap;
+                        return (
+                          <circle
+                            key={`${index}-${rollIndex}`}
+                            cx={cx}
+                            cy={cy}
+                            r={circleRadius}
+                            fill="white"
+                            stroke="rgb(51 65 85)"
+                            strokeWidth="1"
+                          />
+                        );
+                      })}
                       <text x={layerViewW / 2} y={Math.max(12, y + layerHeight / 2 + 4)} textAnchor="middle" className="fill-slate-700 text-[10px] font-semibold">
                         Layer {index + 1}: {layer.placed.length} roll{layer.placed.length === 1 ? "" : "s"}
                       </text>
