@@ -490,16 +490,16 @@ function MultiBoxPackingDiagram({ packingPlan }) {
 
   const safeIndex = Math.min(boxIndex, packingPlan.boxes.length - 1);
   const current = packingPlan.boxes[safeIndex];
-  const orientation = current.orientation;
+  const boxDims = current.orientation;
   const placed = current.topViewPlaced || [];
   const viewW = 820;
-  const viewH = Math.max(260, Math.round((orientation.W / orientation.L) * viewW));
-  const scale = Math.min(viewW / orientation.L, viewH / orientation.W);
-  const svgW = orientation.L * scale;
-  const svgH = orientation.W * scale;
+  const viewH = Math.max(260, Math.round((boxDims.W / boxDims.L) * viewW));
+  const scale = Math.min(viewW / boxDims.L, viewH / boxDims.W);
+  const svgW = boxDims.L * scale;
+  const svgH = boxDims.W * scale;
   const layerViewW = 170;
   const layerViewH = 220;
-  const layerScaleY = layerViewH / orientation.H;
+  const layerScaleY = layerViewH / boxDims.H;
   const packingLabel = PACKING_METHOD_LABELS[current.packingMethod || DEFAULT_PACKING_METHOD] || PACKING_METHOD_LABELS[DEFAULT_PACKING_METHOD];
   const usesPadSeparator =
     current?.box?.l === 24 && current?.box?.w === 16 && (current?.box?.h === 8 || current?.box?.h === 12);
@@ -534,8 +534,8 @@ function MultiBoxPackingDiagram({ packingPlan }) {
 
       <div className="mb-2 grid gap-2 text-xs text-slate-600 sm:grid-cols-2 xl:grid-cols-5">
         <div className="rounded-xl bg-slate-100 px-3 py-2">Box: <span className="font-semibold">{current.boxName}</span></div>
-        <div className="rounded-xl bg-slate-100 px-3 py-2">Top view: {orientation.L} x {orientation.W}</div>
-        <div className="rounded-xl bg-slate-100 px-3 py-2">Height: {orientation.H}</div>
+        <div className="rounded-xl bg-slate-100 px-3 py-2">Top view: {boxDims.L} x {boxDims.W}</div>
+        <div className="rounded-xl bg-slate-100 px-3 py-2">Height: {boxDims.H}</div>
         <div className="rounded-xl bg-slate-100 px-3 py-2">Rolls in box: {current.placedCount}</div>
         <div className="rounded-xl bg-slate-100 px-3 py-2">Packing: {packingLabel}</div>
       </div>
@@ -545,7 +545,7 @@ function MultiBoxPackingDiagram({ packingPlan }) {
           <div className="mb-1 text-sm font-medium text-slate-700">Layer 1 overhead view</div>
           <div className="flex min-h-[260px] flex-1 items-stretch gap-2">
             <div className="flex items-center justify-center text-xs font-semibold text-slate-500 [writing-mode:vertical-rl] rotate-180">
-              {formatNumber(orientation.W)}&quot;
+              {formatNumber(boxDims.W)}&quot;
             </div>
             <div className="flex min-w-0 flex-1 flex-col">
               <div className="min-h-[260px] flex-1 overflow-hidden rounded-2xl border bg-slate-50 p-2">
@@ -584,7 +584,7 @@ function MultiBoxPackingDiagram({ packingPlan }) {
                   })}
                 </svg>
               </div>
-              <div className="pt-1 text-center text-xs font-semibold text-slate-500">{formatNumber(orientation.L)}&quot;</div>
+              <div className="pt-1 text-center text-xs font-semibold text-slate-500">{formatNumber(boxDims.L)}&quot;</div>
             </div>
           </div>
         </div>
@@ -593,7 +593,7 @@ function MultiBoxPackingDiagram({ packingPlan }) {
           <div className="mb-1 text-sm font-medium text-slate-700">Layer view</div>
           <div className="flex items-center gap-2 rounded-2xl border bg-slate-50 p-3">
             <div className="flex items-center justify-center text-xs font-semibold text-slate-500 [writing-mode:vertical-rl] rotate-180">
-              {formatNumber(orientation.H)}&quot;
+              {formatNumber(boxDims.H)}&quot;
             </div>
             <div className="min-w-0 flex-1">
               <svg width={layerViewW} height={layerViewH} viewBox={`0 0 ${layerViewW} ${layerViewH}`} className="mx-auto bg-white">
