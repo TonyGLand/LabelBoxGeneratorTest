@@ -127,6 +127,7 @@ function packLayerStandard(instances, orientation, remainingHeight, orientationM
         spanL: footprint.spanL,
         spanW: footprint.spanW,
         stackHeight: footprint.stackHeight,
+        orientationMode,
       });
       placedIds.add(roll.id);
       cursorX += footprint.spanL;
@@ -165,6 +166,7 @@ function packLayerOffset(instances, orientation, remainingHeight, orientationMod
           spanL: footprint.spanL,
           spanW: footprint.spanW,
           stackHeight: footprint.stackHeight,
+          orientationMode,
         });
         placedIds.add(roll.id);
       }
