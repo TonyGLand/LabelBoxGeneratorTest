@@ -172,7 +172,7 @@ function runTests() {
   });
 }
 
-function MultiBoxPackingDiagram({ packingPlan, packingMethod, onPackingMethodChange, activePackingMethod, rollOrientation, onRollOrientationChange, activeRollOrientation }) {
+function MultiBoxPackingDiagram({ packingPlan, packingMethod, onPackingMethodChange, activePackingMethod }) {
   const [boxIndex, setBoxIndex] = useState(0);
   const [layerIndex, setLayerIndex] = useState(0);
 
@@ -192,15 +192,15 @@ function MultiBoxPackingDiagram({ packingPlan, packingMethod, onPackingMethodCha
   const placed = (current.layers[safeLayerIndex] && current.layers[safeLayerIndex].placed) || [];
   const viewW = 820;
   const viewH = Math.max(260, Math.round((orientation.W / orientation.L) * viewW));
-  const scale = Math.min(viewW / orientation.L, viewH / orientation.W);
-  const svgW = orientation.L * scale;
-  const svgH = orientation.W * scale;
+  const diagramPadding = 10;
+  const scale = Math.min((viewW - diagramPadding * 2) / orientation.L, (viewH - diagramPadding * 2) / orientation.W);
+  const svgW = orientation.L * scale + diagramPadding * 2;
+  const svgH = orientation.W * scale + diagramPadding * 2;
   const layerViewW = 170;
   const layerViewH = 220;
   const layerScaleY = layerViewH / orientation.H;
   const packingLabel = PACKING_METHOD_LABELS[current.packingMethod || DEFAULT_PACKING_METHOD] || PACKING_METHOD_LABELS[DEFAULT_PACKING_METHOD];
   const packingBestLabel = `Best fit (${PACKING_METHOD_LABELS[activePackingMethod || DEFAULT_PACKING_METHOD] || PACKING_METHOD_LABELS[DEFAULT_PACKING_METHOD]})`;
-  const orientationBestLabel = `Best fit (${(activeRollOrientation || "standing") === "flat" ? "Flat (sideways)" : "Standing"})`;
 
   useEffect(() => {
     setBoxIndex(0);
@@ -221,11 +221,6 @@ function MultiBoxPackingDiagram({ packingPlan, packingMethod, onPackingMethodCha
               <option value="best">{packingBestLabel}</option>
               <option value="standard">Standard grid</option>
               <option value="offset">Hex / offset rows</option>
-            </SelectField>
-            <SelectField label="Roll orientation" value={rollOrientation} onChange={onRollOrientationChange}>
-              <option value="best">{orientationBestLabel}</option>
-              <option value="standing">Standing</option>
-              <option value="flat">Flat (sideways)</option>
             </SelectField>
           </div>
           <p className="text-xs text-slate-600">Use the arrows to view each box setup. Dashed outlines show clearance; solid shapes show the actual rolls.</p>
