@@ -557,46 +557,19 @@ function MultiBoxPackingDiagram({ packingPlan }) {
                     const clearanceR = roll.r * scale;
                     const actualR = (roll.actualDiameter / 2) * scale;
                     const labelFontSize = Math.max(10, Math.min(18, actualR * 0.6));
-                    const isSideways = roll.repeatEdge === "sideways";
                     return (
                       <g key={roll.id}>
-                        {isSideways ? (
-                          <>
-                            <rect
-                              x={cx - clearanceR}
-                              y={cy - clearanceR}
-                              width={clearanceR * 2}
-                              height={clearanceR * 2}
-                              fill="rgb(248 250 252)"
-                              stroke="rgb(203 213 225)"
-                              strokeWidth="1"
-                              strokeDasharray="4 3"
-                            />
-                            <rect
-                              x={cx - actualR}
-                              y={cy - actualR}
-                              width={actualR * 2}
-                              height={actualR * 2}
-                              fill="rgb(226 232 240)"
-                              stroke="rgb(51 65 85)"
-                              strokeWidth="1.35"
-                            />
-                          </>
-                        ) : (
-                          <>
-                            <circle
-                              cx={cx}
-                              cy={cy}
-                              r={clearanceR}
-                              fill="rgb(248 250 252)"
-                              stroke="rgb(203 213 225)"
-                              strokeWidth="1"
-                              strokeDasharray="4 3"
-                            />
-                            <circle cx={cx} cy={cy} r={actualR} fill="rgb(226 232 240)" stroke="rgb(51 65 85)" strokeWidth="1.35" />
-                            <circle cx={cx} cy={cy} r={Math.max(2, (DEFAULT_CORE_DIAMETER / 2) * scale)} fill="white" stroke="rgb(100 116 139)" strokeWidth="2.2" />
-                          </>
-                        )}
+                        <circle
+                          cx={cx}
+                          cy={cy}
+                          r={clearanceR}
+                          fill="rgb(248 250 252)"
+                          stroke="rgb(203 213 225)"
+                          strokeWidth="1"
+                          strokeDasharray="4 3"
+                        />
+                        <circle cx={cx} cy={cy} r={actualR} fill="rgb(226 232 240)" stroke="rgb(51 65 85)" strokeWidth="1.35" />
+                        <circle cx={cx} cy={cy} r={Math.max(2, (DEFAULT_CORE_DIAMETER / 2) * scale)} fill="white" stroke="rgb(100 116 139)" strokeWidth="2.2" />
                         <text
                           x={cx}
                           y={cy + labelFontSize * 0.32}
