@@ -6,12 +6,12 @@ const DEFAULT_CLEARANCE = 0.25;
 const DEFAULT_EXTRA_PERCENT = 5;
 const DEFAULT_LABEL_GAP = 0.25;
 const DEFAULT_CORE_HEIGHT_OVERHANG = 0.5;
-const DEFAULT_REPEAT_EDGE = "sideways";
+const DEFAULT_REPEAT_EDGE = "short";
 const DEFAULT_PACKING_METHOD = "standard";
 
 const REPEAT_EDGE_LABELS = {
-  flat: "Flat",
-  sideways: "Sideways",
+  short: "Short edge",
+  long: "Long edge",
 };
 
 const PACKING_METHOD_LABELS = {
@@ -69,7 +69,7 @@ const TEST_CASES = [
   {
     name: "Long edge orientation uses the short edge as repeat length",
     item: { width: 4, height: 3.396, rolls: 2, labelsPerRoll: 500 },
-    repeatEdge: "flat",
+    repeatEdge: "long",
     expect: { repeat: 3.396, repeatPitch: 3.646, labelHeight: 4, rollHeight: 4.5, rolls: 2, labelsPerRoll: 500 },
   },
   {
@@ -144,7 +144,7 @@ function normalizeRollInput(item, repeatEdgeChoice = item.repeatEdge || DEFAULT_
   const height = Number(item.height);
   const rolls = Number(item.rolls);
   const labelsPerRoll = Number(String(item.labelsPerRoll).replace(/,/g, ""));
-  const repeatEdge = repeatEdgeChoice === "flat" || repeatEdgeChoice === "long" ? "flat" : "sideways";
+  const repeatEdge = repeatEdgeChoice === "long" ? "long" : "short";
 
   if (!Number.isFinite(width) || width <= 0) {
     return { raw: item, error: "Width must be a positive number." };
@@ -164,8 +164,8 @@ function normalizeRollInput(item, repeatEdgeChoice = item.repeatEdge || DEFAULT_
 
   const shortEdge = Math.min(width, height);
   const longEdge = Math.max(width, height);
-  const labelHeight = repeatEdge === "flat" ? longEdge : shortEdge;
-  const repeat = repeatEdge === "flat" ? shortEdge : longEdge;
+  const labelHeight = repeatEdge === "long" ? longEdge : shortEdge;
+  const repeat = repeatEdge === "long" ? shortEdge : longEdge;
   const rollHeight = labelHeight + DEFAULT_CORE_HEIGHT_OVERHANG;
   const repeatPitch = repeat + DEFAULT_LABEL_GAP;
 
@@ -490,16 +490,16 @@ function MultiBoxPackingDiagram({ packingPlan }) {
 
   const safeIndex = Math.min(boxIndex, packingPlan.boxes.length - 1);
   const current = packingPlan.boxes[safeIndex];
-  const boxDims = current.orientation;
+  const orientation = current.orientation;
   const placed = current.topViewPlaced || [];
   const viewW = 820;
-  const viewH = Math.max(260, Math.round((boxDims.W / boxDims.L) * viewW));
-  const scale = Math.min(viewW / boxDims.L, viewH / boxDims.W);
-  const svgW = boxDims.L * scale;
-  const svgH = boxDims.W * scale;
+  const viewH = Math.max(260, Math.round((orientation.W / orientation.L) * viewW));
+  const scale = Math.min(viewW / orientation.L, viewH / orientation.W);
+  const svgW = orientation.L * scale;
+  const svgH = orientation.W * scale;
   const layerViewW = 170;
   const layerViewH = 220;
-  const layerScaleY = layerViewH / boxDims.H;
+  const layerScaleY = layerViewH / orientation.H;
   const packingLabel = PACKING_METHOD_LABELS[current.packingMethod || DEFAULT_PACKING_METHOD] || PACKING_METHOD_LABELS[DEFAULT_PACKING_METHOD];
   const usesPadSeparator =
     current?.box?.l === 24 && current?.box?.w === 16 && (current?.box?.h === 8 || current?.box?.h === 12);
@@ -534,8 +534,8 @@ function MultiBoxPackingDiagram({ packingPlan }) {
 
       <div className="mb-2 grid gap-2 text-xs text-slate-600 sm:grid-cols-2 xl:grid-cols-5">
         <div className="rounded-xl bg-slate-100 px-3 py-2">Box: <span className="font-semibold">{current.boxName}</span></div>
-        <div className="rounded-xl bg-slate-100 px-3 py-2">Top view: {boxDims.L} x {boxDims.W}</div>
-        <div className="rounded-xl bg-slate-100 px-3 py-2">Height: {boxDims.H}</div>
+        <div className="rounded-xl bg-slate-100 px-3 py-2">Top view: {orientation.L} x {orientation.W}</div>
+        <div className="rounded-xl bg-slate-100 px-3 py-2">Height: {orientation.H}</div>
         <div className="rounded-xl bg-slate-100 px-3 py-2">Rolls in box: {current.placedCount}</div>
         <div className="rounded-xl bg-slate-100 px-3 py-2">Packing: {packingLabel}</div>
       </div>
@@ -545,7 +545,7 @@ function MultiBoxPackingDiagram({ packingPlan }) {
           <div className="mb-1 text-sm font-medium text-slate-700">Layer 1 overhead view</div>
           <div className="flex min-h-[260px] flex-1 items-stretch gap-2">
             <div className="flex items-center justify-center text-xs font-semibold text-slate-500 [writing-mode:vertical-rl] rotate-180">
-              {formatNumber(boxDims.W)}&quot;
+              {formatNumber(orientation.W)}&quot;
             </div>
             <div className="flex min-w-0 flex-1 flex-col">
               <div className="min-h-[260px] flex-1 overflow-hidden rounded-2xl border bg-slate-50 p-2">
@@ -584,7 +584,7 @@ function MultiBoxPackingDiagram({ packingPlan }) {
                   })}
                 </svg>
               </div>
-              <div className="pt-1 text-center text-xs font-semibold text-slate-500">{formatNumber(boxDims.L)}&quot;</div>
+              <div className="pt-1 text-center text-xs font-semibold text-slate-500">{formatNumber(orientation.L)}&quot;</div>
             </div>
           </div>
         </div>
@@ -593,7 +593,7 @@ function MultiBoxPackingDiagram({ packingPlan }) {
           <div className="mb-1 text-sm font-medium text-slate-700">Layer view</div>
           <div className="flex items-center gap-2 rounded-2xl border bg-slate-50 p-3">
             <div className="flex items-center justify-center text-xs font-semibold text-slate-500 [writing-mode:vertical-rl] rotate-180">
-              {formatNumber(boxDims.H)}&quot;
+              {formatNumber(orientation.H)}&quot;
             </div>
             <div className="min-w-0 flex-1">
               <svg width={layerViewW} height={layerViewH} viewBox={`0 0 ${layerViewW} ${layerViewH}`} className="mx-auto bg-white">
@@ -601,13 +601,6 @@ function MultiBoxPackingDiagram({ packingPlan }) {
                 {current.layers.map((layer, index) => {
                   const layerHeight = Math.max(layer.layerHeight * layerScaleY, 6);
                   const y = layerViewH - current.layers.slice(0, index + 1).reduce((sum, l) => sum + l.layerHeight * layerScaleY, 0);
-                  const rollCount = layer.placed.length;
-                  const laneWidth = layerViewW - 16;
-                  const maxCols = Math.max(1, Math.floor(laneWidth / 14));
-                  const rows = Math.max(1, Math.ceil(rollCount / maxCols));
-                  const colGap = laneWidth / Math.max(1, Math.min(rollCount, maxCols));
-                  const rowGap = layerHeight / rows;
-                  const circleRadius = Math.max(2.5, Math.min(6, Math.min(colGap, rowGap) * 0.35));
                   return (
                     <g key={index}>
                       <rect
@@ -619,23 +612,6 @@ function MultiBoxPackingDiagram({ packingPlan }) {
                         stroke="rgb(51 65 85)"
                         strokeWidth="1"
                       />
-                      {Array.from({ length: rollCount }).map((_, rollIndex) => {
-                        const col = rollIndex % maxCols;
-                        const row = Math.floor(rollIndex / maxCols);
-                        const cx = 8 + (col + 0.5) * colGap;
-                        const cy = Math.max(0, y) + (row + 0.5) * rowGap;
-                        return (
-                          <circle
-                            key={`${index}-${rollIndex}`}
-                            cx={cx}
-                            cy={cy}
-                            r={circleRadius}
-                            fill="white"
-                            stroke="rgb(51 65 85)"
-                            strokeWidth="1"
-                          />
-                        );
-                      })}
                       <text x={layerViewW / 2} y={Math.max(12, y + layerHeight / 2 + 4)} textAnchor="middle" className="fill-slate-700 text-[10px] font-semibold">
                         Layer {index + 1}: {layer.placed.length} roll{layer.placed.length === 1 ? "" : "s"}
                       </text>
@@ -870,8 +846,8 @@ function LabelRollBoxCalculator() {
                 <NumberField label="# of rolls" value={form.rolls} onChange={(v) => updateForm("rolls", v)} step="1" />
                 <NumberField label="Labels / roll" value={form.labelsPerRoll} onChange={(v) => updateForm("labelsPerRoll", v)} step="1" />
                 <SelectField label="Orientation" value={repeatEdge} onChange={setRepeatEdge}>
-                  <option value="flat">Flat</option>
-                  <option value="sideways">Sideways</option>
+                  <option value="short">Short edge comes off</option>
+                  <option value="long">Long edge comes off</option>
                 </SelectField>
               </div>
 

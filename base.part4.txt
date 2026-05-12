@@ -29,41 +29,25 @@
             <div className="flex min-w-0 flex-1 flex-col">
               <div className="min-h-[260px] flex-1 overflow-hidden rounded-2xl border bg-slate-50 p-2">
                 <svg width="100%" height="100%" viewBox={`0 0 ${svgW} ${svgH}`} preserveAspectRatio="xMidYMid meet" className="bg-white">
-                  <rect x={diagramPadding} y={diagramPadding} width={orientation.L * scale} height={orientation.W * scale} fill="white" stroke="currentColor" strokeWidth="2" className="text-slate-800" />
+                  <rect x="0" y="0" width={svgW} height={svgH} fill="white" stroke="currentColor" strokeWidth="2" className="text-slate-800" />
                   {placed.map((roll) => {
-                    const cx = roll.x * scale + diagramPadding;
-                    const cy = roll.y * scale + diagramPadding;
-                    const clearanceW = (roll.spanL || roll.actualDiameter) * scale;
-                    const clearanceH = (roll.spanW || roll.actualDiameter) * scale;
-                    const actualW = (roll.actualSpanL || roll.actualDiameter) * scale;
-                    const actualH = (roll.actualSpanW || roll.actualDiameter) * scale;
-                    const isStanding = (roll.orientationMode || "standing") === "standing";
-                    const labelFontSize = Math.max(10, Math.min(18, Math.min(actualW, actualH) * 0.45));
+                    const cx = roll.x * scale;
+                    const cy = roll.y * scale;
+                    const clearanceR = roll.r * scale;
+                    const actualR = (roll.actualDiameter / 2) * scale;
+                    const labelFontSize = Math.max(10, Math.min(18, actualR * 0.6));
                     return (
                       <g key={roll.id}>
-                        <rect
-                          x={cx - clearanceW / 2}
-                          y={cy - clearanceH / 2}
-                          width={clearanceW}
-                          height={clearanceH}
+                        <circle
+                          cx={cx}
+                          cy={cy}
+                          r={clearanceR}
                           fill="rgb(248 250 252)"
                           stroke="rgb(203 213 225)"
                           strokeWidth="1"
                           strokeDasharray="4 3"
                         />
-                        {isStanding ? (
-                          <rect
-                            x={cx - actualW / 2}
-                            y={cy - actualH / 2}
-                            width={actualW}
-                            height={actualH}
-                            fill="rgb(226 232 240)"
-                            stroke="rgb(51 65 85)"
-                            strokeWidth="1.35"
-                          />
-                        ) : (
-                          <circle cx={cx} cy={cy} r={Math.min(actualW, actualH) / 2} fill="rgb(226 232 240)" stroke="rgb(51 65 85)" strokeWidth="1.35" />
-                        )}
+                        <circle cx={cx} cy={cy} r={actualR} fill="rgb(226 232 240)" stroke="rgb(51 65 85)" strokeWidth="1.35" />
                         <circle cx={cx} cy={cy} r={Math.max(2, (DEFAULT_CORE_DIAMETER / 2) * scale)} fill="white" stroke="rgb(100 116 139)" strokeWidth="2.2" />
                         <text
                           x={cx}
@@ -114,7 +98,7 @@
                   );
                 })}
               </svg>
-              <div className="mt-2 text-center text-xs text-slate-600">Side view of stacked layers.</div><div className="mt-2 max-h-32 overflow-y-auto rounded-lg bg-slate-50 p-2 text-xs text-slate-600">{current.layers.map((layer, idx)=><div key={idx}><span className="font-semibold">Layer {idx+1}:</span> {summarizeLayerRollLabels(layer.placed)}</div>)}</div>
+              <div className="mt-2 text-center text-xs text-slate-600">Side view of stacked layers.</div>
             </div>
           </div>
         </div>
@@ -137,31 +121,31 @@ function RollCalculationsTable({ rolls, onRemove }) {
   return (
     <div className="h-full overflow-y-auto overflow-x-hidden rounded-2xl border bg-white">
       <table className="w-full table-fixed text-sm">
-        <thead className="sticky top-0 bg-slate-100 text-xs uppercase tracking-wide text-slate-500">
+        <thead className="sticky top-0 bg-slate-100 text-left text-xs uppercase tracking-wide text-slate-500">
           <tr>
-            <th className="p-3 text-center">Roll IDs</th>
-            <th className="p-3 text-center">Rolls</th>
-            <th className="p-3 text-center">Width</th>
-            <th className="p-3 text-center">Height</th>
-            <th className="p-3 text-center">Total labels</th>
-            <th className="p-3 text-center">Labels / roll</th>
-            <th className="p-3 text-center">Orientation</th>
-            <th className="p-3 text-center">Diameter</th>
-            <th className="p-3 text-center">Action</th>
+            <th className="p-3">Roll IDs</th>
+            <th className="p-3">Width</th>
+            <th className="p-3">Height</th>
+            <th className="p-3">Rolls</th>
+            <th className="p-3">Labels / roll</th>
+            <th className="p-3">Orientation</th>
+            <th className="p-3">Diameter</th>
+            <th className="p-3">Eff. size</th>
+            <th className="p-3">Action</th>
           </tr>
         </thead>
         <tbody>
           {rolls.map((roll, groupIndex) => (
             <tr key={roll.id} className="border-t align-top">
-              <td className="break-words p-3 text-center font-semibold text-slate-700">{getRollLabelRange(groupIndex, roll.rolls)}</td>
-              <td className="p-3 text-center">{roll.rolls}</td>
-              <td className="p-3 text-center">{formatNumber(roll.width)}&quot;</td>
-              <td className="p-3 text-center">{formatNumber(roll.height)}&quot;</td>
-              <td className="break-words p-3 text-center">{Math.round(roll.totalLabels || 0).toLocaleString()}</td>
-              <td className="break-words p-3 text-center">{Math.round(roll.labelsPerRoll).toLocaleString()}</td>
-              <td className="break-words p-3 text-center">{roll.repeatEdgeLabel}</td>
-              <td className="p-3 text-center font-semibold">{formatNumber(roll.outerDiameter)}&quot;</td>
-              <td className="p-3 text-center">
+              <td className="break-words p-3 font-semibold text-slate-700">{getRollLabelRange(groupIndex, roll.rolls)}</td>
+              <td className="p-3">{formatNumber(roll.width)}&quot;</td>
+              <td className="p-3">{formatNumber(roll.height)}&quot;</td>
+              <td className="p-3">{roll.rolls}</td>
+              <td className="break-words p-3">{roll.labelsPerRoll.toLocaleString()}</td>
+              <td className="break-words p-3">{roll.repeatEdgeLabel}</td>
+              <td className="p-3 font-semibold">{formatNumber(roll.outerDiameter)}&quot;</td>
+              <td className="break-words p-3">{formatNumber(roll.effectiveDiameter)} x {formatNumber(roll.effectiveHeight)}</td>
+              <td className="p-3">
                 <button
                   type="button"
                   onClick={() => onRemove(roll.id)}
@@ -182,7 +166,7 @@ function BoxSummary({ packingPlan }) {
   if (!packingPlan || packingPlan.boxes.length === 0) {
     return (
       <div className="rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">
-        Box summary will appear after you add at least one roll item and select at least one box size.
+        Box summary will appear after you add at least one roll group and select at least one box size.
       </div>
     );
   }

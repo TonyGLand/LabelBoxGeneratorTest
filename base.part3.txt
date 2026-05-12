@@ -1,11 +1,11 @@
 
-function chooseBestBoxForRemaining(instances, availableBoxes = BOXES, packingMethod = DEFAULT_PACKING_METHOD, rollOrientation = "standing") {
+function chooseBestBoxForRemaining(instances, availableBoxes = BOXES, packingMethod = DEFAULT_PACKING_METHOD) {
   if (!instances.length) return null;
   let best = null;
 
   for (const box of availableBoxes) {
     const orientation = { L: box.l, W: box.w, H: box.h, box };
-    const packed = packBox(instances, orientation, packingMethod, rollOrientation);
+    const packed = packBox(instances, orientation, packingMethod);
     if (packed.placedCount === 0) continue;
 
     const candidate = {
@@ -36,14 +36,14 @@ function chooseBestBoxForRemaining(instances, availableBoxes = BOXES, packingMet
   return best;
 }
 
-function buildMultiBoxPlan(rollGroups, availableBoxes = BOXES, packingMethod = DEFAULT_PACKING_METHOD, rollOrientation = "standing") {
+function buildMultiBoxPlan(rollGroups, availableBoxes = BOXES, packingMethod = DEFAULT_PACKING_METHOD) {
   let remaining = expandRollInstances(rollGroups);
   const boxes = [];
   let guard = 0;
 
   while (remaining.length > 0 && guard < 200) {
     guard += 1;
-    const best = chooseBestBoxForRemaining(remaining, availableBoxes, packingMethod, rollOrientation);
+    const best = chooseBestBoxForRemaining(remaining, availableBoxes, packingMethod);
 
     if (!best || best.placedCount === 0) {
       return { boxes, unpacked: remaining };
@@ -73,40 +73,24 @@ function getPackingPlanScore(plan) {
   return { unpackedCount, boxCount, totalBoxVolume };
 }
 
-function chooseAutoPackingPlan(rollGroups, availableBoxes = BOXES, rollOrientation = "standing") {
-  const standardPlan = buildMultiBoxPlan(rollGroups, availableBoxes, "standard", rollOrientation);
-  const offsetPlan = buildMultiBoxPlan(rollGroups, availableBoxes, "offset", rollOrientation);
-  const chosenPlan = chooseBetterPlan(standardPlan, offsetPlan);
-  const useStandard = chosenPlan === standardPlan;
+function chooseAutoPackingPlan(rollGroups, availableBoxes = BOXES) {
+  const standardPlan = buildMultiBoxPlan(rollGroups, availableBoxes, "standard");
+  const offsetPlan = buildMultiBoxPlan(rollGroups, availableBoxes, "offset");
+  const standardScore = getPackingPlanScore(standardPlan);
+  const offsetScore = getPackingPlanScore(offsetPlan);
+
+  const useStandard =
+    standardScore.unpackedCount < offsetScore.unpackedCount ||
+    (standardScore.unpackedCount === offsetScore.unpackedCount && standardScore.boxCount < offsetScore.boxCount) ||
+    (standardScore.unpackedCount === offsetScore.unpackedCount && standardScore.boxCount === offsetScore.boxCount && standardScore.totalBoxVolume <= offsetScore.totalBoxVolume);
+
+  const chosenPlan = useStandard ? standardPlan : offsetPlan;
   return {
     ...chosenPlan,
     selectedPackingMethod: useStandard ? "standard" : "offset",
   };
 }
 
-
-function chooseBetterPlan(planA, planB) {
-  const scoreA = getPackingPlanScore(planA);
-  const scoreB = getPackingPlanScore(planB);
-  const useA =
-    scoreA.unpackedCount < scoreB.unpackedCount ||
-    (scoreA.unpackedCount === scoreB.unpackedCount && scoreA.boxCount < scoreB.boxCount) ||
-    (scoreA.unpackedCount === scoreB.unpackedCount && scoreA.boxCount === scoreB.boxCount && scoreA.totalBoxVolume <= scoreB.totalBoxVolume);
-  return useA ? planA : planB;
-}
-
-function chooseBestOrientationPlan(rollGroups, availableBoxes = BOXES, packingMethod = DEFAULT_PACKING_METHOD) {
-  const standingPlan = packingMethod === "best"
-    ? chooseAutoPackingPlan(rollGroups, availableBoxes, "standing")
-    : buildMultiBoxPlan(rollGroups, availableBoxes, packingMethod, "standing");
-  const flatPlan = packingMethod === "best"
-    ? chooseAutoPackingPlan(rollGroups, availableBoxes, "flat")
-    : buildMultiBoxPlan(rollGroups, availableBoxes, packingMethod, "flat");
-
-  const chosen = chooseBetterPlan(standingPlan, flatPlan);
-  const selectedRollOrientation = chosen === standingPlan ? "standing" : "flat";
-  return { ...chosen, selectedRollOrientation };
-}
 function summarizeBoxMix(boxes) {
   const counts = new Map();
   boxes.forEach((boxSetup) => {
@@ -174,7 +158,6 @@ function runTests() {
 
 function MultiBoxPackingDiagram({ packingPlan, packingMethod, onPackingMethodChange, activePackingMethod }) {
   const [boxIndex, setBoxIndex] = useState(0);
-  const [layerIndex, setLayerIndex] = useState(0);
 
   if (!packingPlan || !packingPlan.boxes || packingPlan.boxes.length === 0) {
     return (
@@ -188,43 +171,34 @@ function MultiBoxPackingDiagram({ packingPlan, packingMethod, onPackingMethodCha
   const safeIndex = Math.min(boxIndex, packingPlan.boxes.length - 1);
   const current = packingPlan.boxes[safeIndex];
   const orientation = current.orientation;
-  const safeLayerIndex = Math.min(layerIndex, Math.max(0, current.layers.length - 1));
-  const placed = (current.layers[safeLayerIndex] && current.layers[safeLayerIndex].placed) || [];
+  const placed = current.topViewPlaced || [];
   const viewW = 820;
   const viewH = Math.max(260, Math.round((orientation.W / orientation.L) * viewW));
-  const diagramPadding = 10;
-  const scale = Math.min((viewW - diagramPadding * 2) / orientation.L, (viewH - diagramPadding * 2) / orientation.W);
-  const svgW = orientation.L * scale + diagramPadding * 2;
-  const svgH = orientation.W * scale + diagramPadding * 2;
+  const scale = Math.min(viewW / orientation.L, viewH / orientation.W);
+  const svgW = orientation.L * scale;
+  const svgH = orientation.W * scale;
   const layerViewW = 170;
   const layerViewH = 220;
   const layerScaleY = layerViewH / orientation.H;
   const packingLabel = PACKING_METHOD_LABELS[current.packingMethod || DEFAULT_PACKING_METHOD] || PACKING_METHOD_LABELS[DEFAULT_PACKING_METHOD];
-  const packingBestLabel = `Best fit (${PACKING_METHOD_LABELS[activePackingMethod || DEFAULT_PACKING_METHOD] || PACKING_METHOD_LABELS[DEFAULT_PACKING_METHOD]})`;
-
-  useEffect(() => {
-    setBoxIndex(0);
-    setLayerIndex(0);
-  }, [packingPlan]);
-
-  useEffect(() => {
-    setLayerIndex(0);
-  }, [boxIndex, packingPlan.boxes.length]);
 
   return (
     <Panel className="flex h-full min-h-0 flex-col p-3">
       <div className="mb-2 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="text-lg font-semibold">2D packing view</h2>
-          <div className="mt-2 grid w-full max-w-2xl gap-2 md:grid-cols-2">
+          <div className="mt-2 w-full max-w-xs">
             <SelectField label="Packing method" value={packingMethod} onChange={onPackingMethodChange}>
-              <option value="best">{packingBestLabel}</option>
+              <option value="best">Best fit (auto)</option>
               <option value="standard">Standard grid</option>
               <option value="offset">Hex / offset rows</option>
             </SelectField>
           </div>
-          <p className="text-xs text-slate-600">Use the arrows to view each box setup. Dashed outlines show clearance; solid shapes show the actual rolls.</p>
-                  </div>
+          <p className="text-xs text-slate-600">Use the arrows to view each box setup. Dashed outlines show clearance; solid circles show the actual rolls.</p>
+          {packingMethod === "best" && (
+            <p className="mt-1 text-xs text-slate-500">Auto-selected method: {PACKING_METHOD_LABELS[activePackingMethod || DEFAULT_PACKING_METHOD]}</p>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           <button
             type="button"

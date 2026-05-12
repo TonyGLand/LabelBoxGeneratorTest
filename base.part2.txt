@@ -54,35 +54,6 @@ function getRollLabelRange(groupIndex) {
   return getRollLabel(groupIndex);
 }
 
-
-function getRollFootprint(roll, orientationMode) {
-  if (orientationMode === "flat") {
-    return {
-      spanL: roll.diameter,
-      spanW: roll.height,
-      stackHeight: roll.diameter,
-      drawR: Math.min(roll.diameter, roll.height) / 2,
-    };
-  }
-  return {
-    spanL: roll.diameter,
-    spanW: roll.diameter,
-    stackHeight: roll.height,
-    drawR: roll.diameter / 2,
-  };
-}
-
-function centerPlacedInLayer(placed, orientation) {
-  if (!placed.length) return placed;
-  const minX = Math.min(...placed.map((r) => r.x - r.spanL / 2));
-  const maxX = Math.max(...placed.map((r) => r.x + r.spanL / 2));
-  const minY = Math.min(...placed.map((r) => r.y - r.spanW / 2));
-  const maxY = Math.max(...placed.map((r) => r.y + r.spanW / 2));
-  const shiftX = (orientation.L - (maxX - minX)) / 2 - minX;
-  const shiftY = (orientation.W - (maxY - minY)) / 2 - minY;
-  return placed.map((r) => ({ ...r, x: r.x + shiftX, y: r.y + shiftY }));
-}
-
 function expandRollInstances(rollGroups) {
   const instances = [];
   rollGroups.forEach((group, groupIndex) => {
@@ -101,7 +72,7 @@ function expandRollInstances(rollGroups) {
   return instances.sort((a, b) => b.diameter - a.diameter);
 }
 
-function packLayerStandard(instances, orientation, remainingHeight, orientationMode = "standing") {
+function packLayerStandard(instances, orientation, remainingHeight) {
   const placed = [];
   const placedIds = new Set();
   let cursorX = 0;
@@ -109,45 +80,40 @@ function packLayerStandard(instances, orientation, remainingHeight, orientationM
   let rowHeight = 0;
 
   for (const roll of instances) {
-    const footprint = getRollFootprint(roll, orientationMode);
-    if (footprint.stackHeight > remainingHeight || footprint.spanL > orientation.L || footprint.spanW > orientation.W) continue;
+    const d = roll.diameter;
+    if (roll.height > remainingHeight || d > orientation.L || d > orientation.W) continue;
 
-    if (cursorX + footprint.spanL > orientation.L) {
+    if (cursorX + d > orientation.L) {
       cursorX = 0;
       cursorY += rowHeight;
       rowHeight = 0;
     }
 
-    if (cursorY + footprint.spanW <= orientation.W) {
+    if (cursorY + d <= orientation.W) {
       placed.push({
         ...roll,
-        x: cursorX + footprint.spanL / 2,
-        y: cursorY + footprint.spanW / 2,
-        r: footprint.drawR,
-        spanL: footprint.spanL,
-        spanW: footprint.spanW,
-        stackHeight: footprint.stackHeight,
-        orientationMode,
+        x: cursorX + d / 2,
+        y: cursorY + d / 2,
+        r: d / 2,
       });
       placedIds.add(roll.id);
-      cursorX += footprint.spanL;
-      rowHeight = Math.max(rowHeight, footprint.spanW);
+      cursorX += d;
+      rowHeight = Math.max(rowHeight, d);
     }
   }
 
   const remaining = instances.filter((roll) => !placedIds.has(roll.id));
-  const centeredPlaced = centerPlacedInLayer(placed, orientation);
-  const layerHeight = centeredPlaced.length ? Math.max(...centeredPlaced.map((roll) => roll.stackHeight || roll.height)) : 0;
-  return { placed: centeredPlaced, remaining, layerHeight };
+  const layerHeight = placed.length ? Math.max(...placed.map((roll) => roll.height)) : 0;
+  return { placed, remaining, layerHeight };
 }
 
-function packLayerOffset(instances, orientation, remainingHeight, orientationMode = "standing") {
-  const eligible = instances.filter((roll) => { const f=getRollFootprint(roll, orientationMode); return f.stackHeight <= remainingHeight && f.spanL <= orientation.L && f.spanW <= orientation.W; });
+function packLayerOffset(instances, orientation, remainingHeight) {
+  const eligible = instances.filter((roll) => roll.height <= remainingHeight && roll.diameter <= orientation.L && roll.diameter <= orientation.W);
   if (!eligible.length) return { placed: [], remaining: instances, layerHeight: 0 };
 
   const placed = [];
   const placedIds = new Set();
-  const slotD = Math.max(...eligible.map((roll) => getRollFootprint(roll, orientationMode).spanL));
+  const slotD = Math.max(...eligible.map((roll) => roll.diameter));
   const rowStep = slotD * Math.sqrt(3) / 2;
   let rowIndex = 0;
   let centerY = slotD / 2;
@@ -157,16 +123,11 @@ function packLayerOffset(instances, orientation, remainingHeight, orientationMod
     while (centerX + slotD / 2 <= orientation.L + 1e-9) {
       const roll = eligible.find((candidate) => !placedIds.has(candidate.id));
       if (roll) {
-        const footprint = getRollFootprint(roll, orientationMode);
         placed.push({
           ...roll,
           x: centerX,
           y: centerY,
-          r: footprint.drawR,
-          spanL: footprint.spanL,
-          spanW: footprint.spanW,
-          stackHeight: footprint.stackHeight,
-          orientationMode,
+          r: roll.diameter / 2,
         });
         placedIds.add(roll.id);
       }
@@ -177,25 +138,23 @@ function packLayerOffset(instances, orientation, remainingHeight, orientationMod
   }
 
   const remaining = instances.filter((roll) => !placedIds.has(roll.id));
-  const centeredPlaced = centerPlacedInLayer(placed, orientation);
-  const layerHeight = centeredPlaced.length ? Math.max(...centeredPlaced.map((roll) => roll.stackHeight || roll.height)) : 0;
-  return { placed: centeredPlaced, remaining, layerHeight };
+  const layerHeight = placed.length ? Math.max(...placed.map((roll) => roll.height)) : 0;
+  return { placed, remaining, layerHeight };
 }
 
-function packLayer(instances, orientation, remainingHeight, packingMethod = DEFAULT_PACKING_METHOD, orientationMode = "standing") {
+function packLayer(instances, orientation, remainingHeight, packingMethod = DEFAULT_PACKING_METHOD) {
   return packingMethod === "offset"
-    ? packLayerOffset(instances, orientation, remainingHeight, orientationMode)
-    : packLayerStandard(instances, orientation, remainingHeight, orientationMode);
+    ? packLayerOffset(instances, orientation, remainingHeight)
+    : packLayerStandard(instances, orientation, remainingHeight);
 }
 
-function packBox(instances, orientation, packingMethod = DEFAULT_PACKING_METHOD, orientationMode = "standing") {
+function packBox(instances, orientation, packingMethod = DEFAULT_PACKING_METHOD) {
   let remaining = [...instances];
   let remainingHeight = orientation.H;
   const layers = [];
 
   while (remaining.length > 0 && remainingHeight > 0) {
-    const layer = packLayer(remaining, orientation, remainingHeight, packingMethod, orientationMode);
-    if (layers.length > 0 && layer.placed.length > layers[layers.length - 1].placed.length) break;
+    const layer = packLayer(remaining, orientation, remainingHeight, packingMethod);
     if (!layer.placed.length || layer.layerHeight <= 0 || layer.layerHeight > remainingHeight) break;
     layers.push(layer);
     remaining = layer.remaining;
