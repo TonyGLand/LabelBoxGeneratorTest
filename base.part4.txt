@@ -124,13 +124,13 @@ function RollCalculationsTable({ rolls, onRemove }) {
         <thead className="sticky top-0 bg-slate-100 text-left text-xs uppercase tracking-wide text-slate-500">
           <tr>
             <th className="p-3">Roll IDs</th>
+            <th className="p-3">Rolls</th>
             <th className="p-3">Width</th>
             <th className="p-3">Height</th>
-            <th className="p-3">Rolls</th>
-            <th className="p-3">Total labels</th><th className="p-3">Labels / roll</th>
+            <th className="p-3">Total labels</th>
+            <th className="p-3">Labels / roll</th>
             <th className="p-3">Orientation</th>
             <th className="p-3">Diameter</th>
-            <th className="p-3">Eff. size</th>
             <th className="p-3">Action</th>
           </tr>
         </thead>
@@ -138,13 +138,13 @@ function RollCalculationsTable({ rolls, onRemove }) {
           {rolls.map((roll, groupIndex) => (
             <tr key={roll.id} className="border-t align-top">
               <td className="break-words p-3 font-semibold text-slate-700">{getRollLabelRange(groupIndex, roll.rolls)}</td>
+              <td className="p-3">{roll.rolls}</td>
               <td className="p-3">{formatNumber(roll.width)}&quot;</td>
               <td className="p-3">{formatNumber(roll.height)}&quot;</td>
-              <td className="p-3">{roll.rolls}</td>
-              <td className="break-words p-3">{Math.round(roll.totalLabels).toLocaleString()}</td><td className="break-words p-3">{Math.round(roll.labelsPerRoll).toLocaleString()}</td>
+              <td className="break-words p-3">{Math.round(roll.totalLabels).toLocaleString()}</td>
+              <td className="break-words p-3">{Math.round(roll.labelsPerRoll).toLocaleString()}</td>
               <td className="break-words p-3">{roll.repeatEdgeLabel}</td>
               <td className="p-3 font-semibold">{formatNumber(roll.outerDiameter)}&quot;</td>
-              <td className="break-words p-3">{formatNumber(roll.effectiveDiameter)} x {formatNumber(roll.effectiveHeight)}</td>
               <td className="p-3">
                 <button
                   type="button"

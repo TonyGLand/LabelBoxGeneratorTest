@@ -38,7 +38,7 @@ function LabelRollBoxCalculator() {
   const [extraPercent, setExtraPercent] = useState(DEFAULT_EXTRA_PERCENT);
   const [packingMethod, setPackingMethod] = useState(DEFAULT_PACKING_METHOD);
   const [repeatEdge, setRepeatEdge] = useState(DEFAULT_REPEAT_EDGE);
-  const [rollOrientation, setRollOrientation] = useState("standing");
+  const [rollOrientation, setRollOrientation] = useState("best");
   const [selectedBoxIds, setSelectedBoxIds] = useState(DEFAULT_SELECTED_BOX_IDS);
   const [activeTab, setActiveTab] = useState("rolls");
   const [formError, setFormError] = useState("");
@@ -50,8 +50,14 @@ function LabelRollBoxCalculator() {
     const valid = parsed
       .filter((p) => !p.error)
       .map((p) => calculateRoll(p, Number(coreDiameter), Number(caliperMil), Number(clearance), Number(extraPercent)));
-    const autoPlan = valid.length ? chooseAutoPackingPlan(valid, availableBoxes, rollOrientation) : { boxes: [], unpacked: [], selectedPackingMethod: "standard" };
-    const packingPlan = valid.length ? (packingMethod === "best" ? autoPlan : buildMultiBoxPlan(valid, availableBoxes, packingMethod, rollOrientation)) : { boxes: [], unpacked: [] };
+    const autoPlan = valid.length
+      ? (rollOrientation === "best" ? chooseBestOrientationPlan(valid, availableBoxes, "best") : chooseAutoPackingPlan(valid, availableBoxes, rollOrientation))
+      : { boxes: [], unpacked: [], selectedPackingMethod: "standard", selectedRollOrientation: "standing" };
+    const packingPlan = valid.length
+      ? (packingMethod === "best"
+        ? autoPlan
+        : (rollOrientation === "best" ? chooseBestOrientationPlan(valid, availableBoxes, packingMethod) : buildMultiBoxPlan(valid, availableBoxes, packingMethod, rollOrientation)))
+      : { boxes: [], unpacked: [] };
     const boxMix = summarizeBoxMix(packingPlan.boxes);
     const totalRolls = valid.reduce((sum, r) => sum + r.rolls, 0);
     const totalCylinderVolume = valid.reduce((sum, r) => sum + r.totalCylinderVolume, 0);
@@ -64,6 +70,7 @@ function LabelRollBoxCalculator() {
       packingPlan,
       boxMix,
       activePackingMethod: packingMethod === "best" ? autoPlan.selectedPackingMethod : packingMethod,
+      activeRollOrientation: rollOrientation === "best" ? (packingMethod === "best" ? autoPlan.selectedRollOrientation : packingPlan.selectedRollOrientation) : rollOrientation,
       availableBoxes,
       totalRolls,
       totalCylinderVolume,

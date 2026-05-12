@@ -1,4 +1,4 @@
-const { useMemo, useState } = React;
+const { useEffect, useMemo, useState } = React;
 
 const DEFAULT_CORE_DIAMETER = 3.25;
 const DEFAULT_CALIPER_MIL = 6.2;
