@@ -42,16 +42,16 @@ const BOXES = [
 const DEFAULT_SELECTED_BOX_IDS = BOXES.map((box) => box.id);
 
 const SAMPLE_ROLLS = [
-  { id: 1, width: 4, height: 3.396, rolls: 2, labelsPerRoll: 500 },
-  { id: 2, width: 3, height: 2, rolls: 4, labelsPerRoll: 1000 },
-  { id: 3, width: 6, height: 4, rolls: 1, labelsPerRoll: 250 },
+  { id: 1, width: 4, height: 3.396, rolls: 2, totalLabels: 1000 },
+  { id: 2, width: 3, height: 2, rolls: 4, totalLabels: 4000 },
+  { id: 3, width: 6, height: 4, rolls: 1, totalLabels: 250 },
 ];
 
 const EMPTY_FORM = {
   width: "",
   height: "",
   rolls: "",
-  labelsPerRoll: "",
+  totalLabels: "",
 };
 
 const TEST_CASES = [
@@ -142,7 +142,13 @@ function normalizeRollInput(item, repeatEdgeChoice = item.repeatEdge || DEFAULT_
   const width = Number(item.width);
   const height = Number(item.height);
   const rolls = Number(item.rolls);
-  const labelsPerRoll = Number(String(item.labelsPerRoll).replace(/,/g, ""));
+
+  const totalLabels = Number(
+    String(item.totalLabels ?? item.labelsPerRoll).replace(/,/g, "")
+  );
+
+  const labelsPerRoll = totalLabels / rolls;
+
   const repeatEdge = repeatEdgeChoice === "long" ? "long" : "short";
 
   if (!Number.isFinite(width) || width <= 0) {
@@ -157,16 +163,23 @@ function normalizeRollInput(item, repeatEdgeChoice = item.repeatEdge || DEFAULT_
     return { raw: item, error: "Number of rolls must be a positive number." };
   }
 
+  if (!Number.isFinite(totalLabels) || totalLabels <= 0) {
+    return { raw: item, error: "Total labels must be a positive number." };
+  }
+
   if (!Number.isFinite(labelsPerRoll) || labelsPerRoll <= 0) {
-    return { raw: item, error: "Label quantity per roll must be a positive number." };
+    return { raw: item, error: "Labels per roll must be a positive number." };
   }
 
   const shortEdge = Math.min(width, height);
   const longEdge = Math.max(width, height);
+
   const labelHeight = repeatEdge === "long" ? longEdge : shortEdge;
   const repeat = repeatEdge === "long" ? shortEdge : longEdge;
+
   const coreSizeBase = repeat + 0.25;
   const coreSize = Math.round(coreSizeBase * 2) / 2;
+
   const rollHeight = coreSize;
   const repeatPitch = repeat + DEFAULT_LABEL_GAP;
 
@@ -186,8 +199,17 @@ function normalizeRollInput(item, repeatEdgeChoice = item.repeatEdge || DEFAULT_
     coreSize,
     rollHeight,
     rolls,
+    totalLabels,
     labelsPerRoll,
-    description: `${formatNumber(width)} x ${formatNumber(height)} - ${REPEAT_EDGE_LABELS[repeatEdge].toLowerCase()} orientation, ${rolls} roll${rolls === 1 ? "" : "s"}, ${labelsPerRoll.toLocaleString()} labels/roll`,
+
+    description:
+      `${formatNumber(width)} x ${formatNumber(height)} - ` +
+      `${REPEAT_EDGE_LABELS[repeatEdge].toLowerCase()} orientation, ` +
+      `${rolls} roll${rolls === 1 ? "" : "s"}, ` +
+      `${totalLabels.toLocaleString()} total labels ` +
+      `(${labelsPerRoll.toLocaleString(undefined, {
+        maximumFractionDigits: 2,
+      })} labels/roll)`,
   };
 }
 
@@ -342,40 +364,96 @@ function getBoundingRectArea(placed, point, radius) {
 }
 
 function packLayerCompact(instances, orientation, remainingHeight) {
-  const eligible = instances.filter((roll) => roll.height <= remainingHeight && roll.diameter <= orientation.L && roll.diameter <= orientation.W);
-  if (!eligible.length) return { placed: [], remaining: instances, layerHeight: 0 };
+  const eligible = instances.filter(
+    (roll) =>
+      roll.height <= remainingHeight &&
+      roll.diameter <= orientation.L &&
+      roll.diameter <= orientation.W
+  );
+
+  if (!eligible.length) {
+    return { placed: [], remaining: instances, layerHeight: 0 };
+  }
 
   const placed = [];
   const placedIds = new Set();
 
   for (const roll of eligible) {
     const radius = roll.diameter / 2;
-    const candidates = buildCandidateCenters(placed, orientation, radius);
+
+    const candidates = buildCandidateCenters(
+      placed,
+      orientation,
+      radius
+    );
+
     let bestPoint = null;
     let bestArea = Number.POSITIVE_INFINITY;
-    let bestCenterDistance = Number.POSITIVE_INFINITY;
+    let bestWallBias = Number.POSITIVE_INFINITY;
 
     for (const point of candidates) {
       if (!canPlaceAt(point, radius, placed)) continue;
-      const area = getBoundingRectArea(placed, point, radius);
-      const centerDistance = Math.hypot(point.x - orientation.L / 2, point.y - orientation.W / 2);
-      if (area < bestArea - 1e-9 || (Math.abs(area - bestArea) <= 1e-9 && centerDistance < bestCenterDistance)) {
+
+      const area = getBoundingRectArea(
+        placed,
+        point,
+        radius
+      );
+
+      // IMPORTANT:
+      // Prefer wall/corner packing instead of center packing.
+      // This enables:
+      // top-left
+      // top-right
+      // bottom-center triangle layouts.
+
+      const wallBias = point.y * 1000 + point.x;
+
+      if (
+        area < bestArea - 1e-9 ||
+        (
+          Math.abs(area - bestArea) <= 1e-9 &&
+          wallBias < bestWallBias
+        )
+      ) {
         bestArea = area;
-        bestCenterDistance = centerDistance;
+        bestWallBias = wallBias;
         bestPoint = point;
       }
     }
 
     if (bestPoint) {
-      placed.push({ ...roll, x: bestPoint.x, y: bestPoint.y, r: radius });
+      placed.push({
+        ...roll,
+        x: bestPoint.x,
+        y: bestPoint.y,
+        r: radius,
+      });
+
       placedIds.add(roll.id);
     }
   }
 
-  const centeredPlaced = centerPlacedInOrientation(placed, orientation);
-  const remaining = instances.filter((roll) => !placedIds.has(roll.id));
-  const layerHeight = centeredPlaced.length ? Math.max(...centeredPlaced.map((roll) => roll.height)) : 0;
-  return { placed: centeredPlaced, remaining, layerHeight };
+  const centeredPlaced = centerPlacedInOrientation(
+    placed,
+    orientation
+  );
+
+  const remaining = instances.filter(
+    (roll) => !placedIds.has(roll.id)
+  );
+
+  const layerHeight = centeredPlaced.length
+    ? Math.max(
+        ...centeredPlaced.map((roll) => roll.height)
+      )
+    : 0;
+
+  return {
+    placed: centeredPlaced,
+    remaining,
+    layerHeight,
+  };
 }
 
 function packLayer(instances, orientation, remainingHeight) {
@@ -729,7 +807,7 @@ function RollCalculationsTable({ rolls, onRemove }) {
             <th className="p-3">Height</th>
             <th className="p-3">Core size</th>
             <th className="p-3">Rolls</th>
-            <th className="p-3">Labels / roll</th>
+            <th className="p-3">Total labels</th>
             <th className="p-3">Orientation</th>
             <th className="p-3">Diameter</th>
             <th className="p-3">Eff. size</th>
@@ -744,7 +822,7 @@ function RollCalculationsTable({ rolls, onRemove }) {
               <td className="p-3">{formatNumber(roll.height)}&quot;</td>
               <td className="p-3">{formatNumber(roll.coreSize)}&quot;</td>
               <td className="p-3">{roll.rolls}</td>
-              <td className="break-words p-3">{roll.labelsPerRoll.toLocaleString()}</td>
+              <td className="break-words p-3">{roll.totalLabels.toLocaleString()}
               <td className="break-words p-3">{roll.repeatEdgeLabel}</td>
               <td className="p-3 font-semibold">{formatNumber(roll.outerDiameter)}&quot;</td>
               <td className="break-words p-3">{formatNumber(roll.effectiveDiameter)} x {formatNumber(roll.effectiveHeight)}</td>
@@ -922,7 +1000,7 @@ function LabelRollBoxCalculator() {
                 <NumberField label="Width, in" value={form.width} onChange={(v) => updateForm("width", v)} />
                 <NumberField label="Height, in" value={form.height} onChange={(v) => updateForm("height", v)} />
                 <NumberField label="# of rolls" value={form.rolls} onChange={(v) => updateForm("rolls", v)} step="1" />
-                <NumberField label="Labels / roll" value={form.labelsPerRoll} onChange={(v) => updateForm("labelsPerRoll", v)} step="1" />
+                <NumberField label="Total Labels" value={form.totalLabels} onChange={(v) => updateForm("totalLabels", v)} step="1" />
                 <SelectField label="Orientation" value={repeatEdge} onChange={setRepeatEdge}>
                   <option value="short">Short edge comes off</option>
                   <option value="long">Long edge comes off</option>
