@@ -127,7 +127,7 @@ function RollCalculationsTable({ rolls, onRemove }) {
             <th className="p-3">Width</th>
             <th className="p-3">Height</th>
             <th className="p-3">Rolls</th>
-            <th className="p-3">Labels / roll</th>
+            <th className="p-3">Total labels</th>
             <th className="p-3">Orientation</th>
             <th className="p-3">Diameter</th>
             <th className="p-3">Eff. size</th>
@@ -141,7 +141,7 @@ function RollCalculationsTable({ rolls, onRemove }) {
               <td className="p-3">{formatNumber(roll.width)}&quot;</td>
               <td className="p-3">{formatNumber(roll.height)}&quot;</td>
               <td className="p-3">{roll.rolls}</td>
-              <td className="break-words p-3">{roll.labelsPerRoll.toLocaleString()}</td>
+              <td className="break-words p-3">{roll.totalLabels.toLocaleString()}</td>
               <td className="break-words p-3">{roll.repeatEdgeLabel}</td>
               <td className="p-3 font-semibold">{formatNumber(roll.outerDiameter)}&quot;</td>
               <td className="break-words p-3">{formatNumber(roll.effectiveDiameter)} x {formatNumber(roll.effectiveHeight)}</td>

@@ -11,8 +11,9 @@
     coreHeightOverhang: DEFAULT_CORE_HEIGHT_OVERHANG,
     rollHeight,
     rolls,
+    totalLabels,
     labelsPerRoll,
-    description: `${formatNumber(width)} x ${formatNumber(height)} - ${REPEAT_EDGE_LABELS[repeatEdge].toLowerCase()} orientation, ${rolls} roll${rolls === 1 ? "" : "s"}, ${labelsPerRoll.toLocaleString()} labels/roll`,
+    description: `${formatNumber(width)} x ${formatNumber(height)} - ${REPEAT_EDGE_LABELS[repeatEdge].toLowerCase()} orientation, ${rolls} roll${rolls === 1 ? "" : "s"}, ${totalLabels.toLocaleString()} total labels (${labelsPerRoll.toLocaleString(undefined, { maximumFractionDigits: 2 })} labels/roll)`,
   };
 }
 
@@ -72,6 +73,18 @@ function expandRollInstances(rollGroups) {
   return instances.sort((a, b) => b.diameter - a.diameter);
 }
 
+
+function centerPlacedInBox(placed, orientation) {
+  if (!placed.length) return placed;
+  const minX = Math.min(...placed.map((roll) => roll.x - roll.r));
+  const maxX = Math.max(...placed.map((roll) => roll.x + roll.r));
+  const minY = Math.min(...placed.map((roll) => roll.y - roll.r));
+  const maxY = Math.max(...placed.map((roll) => roll.y + roll.r));
+  const offsetX = (orientation.L - (maxX - minX)) / 2 - minX;
+  const offsetY = (orientation.W - (maxY - minY)) / 2 - minY;
+  return placed.map((roll) => ({ ...roll, x: roll.x + offsetX, y: roll.y + offsetY }));
+}
+
 function packLayerStandard(instances, orientation, remainingHeight) {
   const placed = [];
   const placedIds = new Set();
@@ -102,9 +115,10 @@ function packLayerStandard(instances, orientation, remainingHeight) {
     }
   }
 
+  const centeredPlaced = centerPlacedInBox(placed, orientation);
   const remaining = instances.filter((roll) => !placedIds.has(roll.id));
-  const layerHeight = placed.length ? Math.max(...placed.map((roll) => roll.height)) : 0;
-  return { placed, remaining, layerHeight };
+  const layerHeight = centeredPlaced.length ? Math.max(...centeredPlaced.map((roll) => roll.height)) : 0;
+  return { placed: centeredPlaced, remaining, layerHeight };
 }
 
 function packLayerOffset(instances, orientation, remainingHeight) {
@@ -137,9 +151,10 @@ function packLayerOffset(instances, orientation, remainingHeight) {
     centerY = slotD / 2 + rowIndex * rowStep;
   }
 
+  const centeredPlaced = centerPlacedInBox(placed, orientation);
   const remaining = instances.filter((roll) => !placedIds.has(roll.id));
-  const layerHeight = placed.length ? Math.max(...placed.map((roll) => roll.height)) : 0;
-  return { placed, remaining, layerHeight };
+  const layerHeight = centeredPlaced.length ? Math.max(...centeredPlaced.map((roll) => roll.height)) : 0;
+  return { placed: centeredPlaced, remaining, layerHeight };
 }
 
 function packLayer(instances, orientation, remainingHeight, packingMethod = DEFAULT_PACKING_METHOD) {
