@@ -16,8 +16,8 @@ function RollCalculationsTable({ rolls, onRemove }) {
 
   return (
     <div className="h-full overflow-y-auto overflow-x-hidden rounded-2xl border bg-white">
-      <table className="w-full table-fixed text-sm">
-        <thead className="sticky top-0 bg-slate-100 text-left text-xs uppercase tracking-wide text-slate-500">
+      <table className="w-full table-fixed text-sm text-center">
+        <thead className="sticky top-0 bg-slate-100 text-xs uppercase tracking-wide text-slate-500">
           <tr>
             <th className="p-3">Roll IDs</th>
             <th className="p-3">Width</th>
@@ -28,7 +28,6 @@ function RollCalculationsTable({ rolls, onRemove }) {
             <th className="p-3">Labels / roll</th>
             <th className="p-3">Orientation</th>
             <th className="p-3">Diameter</th>
-            <th className="p-3">Eff. size</th>
             <th className="p-3">Action</th>
           </tr>
         </thead>
@@ -44,7 +43,6 @@ function RollCalculationsTable({ rolls, onRemove }) {
               <td className="break-words p-3">{formatNumber(roll.labelsPerRoll, 0)}</td>
               <td className="break-words p-3">{roll.repeatEdgeLabel}</td>
               <td className="p-3 font-semibold">{formatNumber(roll.outerDiameter)}&quot;</td>
-              <td className="break-words p-3">{formatNumber(roll.effectiveDiameter)} x {formatNumber(roll.effectiveHeight)}</td>
               <td className="p-3">
                 <button
                   type="button"
@@ -111,7 +109,7 @@ function LabelRollBoxCalculator() {
   const [extraPercent, setExtraPercent] = useState(DEFAULT_EXTRA_PERCENT);
   const [repeatEdge, setRepeatEdge] = useState(DEFAULT_REPEAT_EDGE);
   const [selectedBoxIds, setSelectedBoxIds] = useState(DEFAULT_SELECTED_BOX_IDS);
-  const [activeTab, setActiveTab] = useState("rolls");
+  const [showSettings, setShowSettings] = useState(false);
   const [formError, setFormError] = useState("");
 
   const result = useMemo(() => {
@@ -195,9 +193,20 @@ function LabelRollBoxCalculator() {
               <div className="text-sm font-semibold text-slate-500">Label Roll Box Calculator v1</div>
               <h1 className="text-xl font-semibold tracking-tight md:text-2xl">Find the practical box plan for label rolls</h1>
             </div>
-            <p className="max-w-3xl text-xs text-slate-600 md:text-right">
-              Add roll items, calculate diameters, then build a multi-box packing plan.
-            </p>
+            <div className="flex items-start gap-3 md:items-center">
+              <p className="max-w-3xl text-xs text-slate-600 md:text-right">
+                Add roll items, calculate diameters, then build a multi-box packing plan.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowSettings((current) => !current)}
+                className="rounded-xl border border-slate-300 bg-white p-2 text-slate-700 hover:bg-slate-50"
+                aria-label="Toggle settings"
+                title="Settings"
+              >
+                ⚙️
+              </button>
+            </div>
           </div>
         </header>
 
