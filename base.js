@@ -7,7 +7,7 @@ const DEFAULT_EXTRA_PERCENT = 5;
 const DEFAULT_LABEL_GAP = 0;
 const DEFAULT_CORE_HEIGHT_OVERHANG = 0.5;
 const DEFAULT_REPEAT_EDGE = "short";
-const DEFAULT_PACKING_METHOD = "standard";
+const DEFAULT_PACKING_METHOD = "compact";
 
 const REPEAT_EDGE_LABELS = {
   short: "Short edge",
@@ -15,8 +15,7 @@ const REPEAT_EDGE_LABELS = {
 };
 
 const PACKING_METHOD_LABELS = {
-  standard: "Standard grid",
-  offset: "Hex / offset rows",
+  compact: "Compact candidate placement",
 };
 
 const BOXES = [
@@ -333,7 +332,16 @@ function canPlaceAt(point, radius, placed, epsilon = 1e-6) {
   });
 }
 
-function packLayerStandard(instances, orientation, remainingHeight) {
+function getBoundingRectArea(placed, point, radius) {
+  const circles = [...placed, { x: point.x, y: point.y, r: radius }];
+  const minX = Math.min(...circles.map((roll) => roll.x - roll.r));
+  const maxX = Math.max(...circles.map((roll) => roll.x + roll.r));
+  const minY = Math.min(...circles.map((roll) => roll.y - roll.r));
+  const maxY = Math.max(...circles.map((roll) => roll.y + roll.r));
+  return (maxX - minX) * (maxY - minY);
+}
+
+function packLayerCompact(instances, orientation, remainingHeight) {
   const eligible = instances.filter((roll) => roll.height <= remainingHeight && roll.diameter <= orientation.L && roll.diameter <= orientation.W);
   if (!eligible.length) return { placed: [], remaining: instances, layerHeight: 0 };
 
@@ -344,15 +352,16 @@ function packLayerStandard(instances, orientation, remainingHeight) {
     const radius = roll.diameter / 2;
     const candidates = buildCandidateCenters(placed, orientation, radius);
     let bestPoint = null;
-    let bestScore = Number.NEGATIVE_INFINITY;
+    let bestArea = Number.POSITIVE_INFINITY;
+    let bestCenterDistance = Number.POSITIVE_INFINITY;
 
     for (const point of candidates) {
       if (!canPlaceAt(point, radius, placed)) continue;
-      const nearestWall = Math.min(point.x - radius, orientation.L - radius - point.x, point.y - radius, orientation.W - radius - point.y);
-      const centerBias = -Math.hypot(point.x - orientation.L / 2, point.y - orientation.W / 2);
-      const score = nearestWall * 5 + centerBias;
-      if (score > bestScore) {
-        bestScore = score;
+      const area = getBoundingRectArea(placed, point, radius);
+      const centerDistance = Math.hypot(point.x - orientation.L / 2, point.y - orientation.W / 2);
+      if (area < bestArea - 1e-9 || (Math.abs(area - bestArea) <= 1e-9 && centerDistance < bestCenterDistance)) {
+        bestArea = area;
+        bestCenterDistance = centerDistance;
         bestPoint = point;
       }
     }
@@ -369,55 +378,17 @@ function packLayerStandard(instances, orientation, remainingHeight) {
   return { placed: centeredPlaced, remaining, layerHeight };
 }
 
-function packLayerOffset(instances, orientation, remainingHeight) {
-  const eligible = instances.filter((roll) => roll.height <= remainingHeight && roll.diameter <= orientation.L && roll.diameter <= orientation.W);
-  if (!eligible.length) return { placed: [], remaining: instances, layerHeight: 0 };
-
-  const placed = [];
-  const placedIds = new Set();
-  const slotD = Math.max(...eligible.map((roll) => roll.diameter));
-  const rowStep = slotD * Math.sqrt(3) / 2;
-  let rowIndex = 0;
-  let centerY = slotD / 2;
-
-  while (centerY + slotD / 2 <= orientation.W + 1e-9) {
-    let centerX = slotD / 2 + (rowIndex % 2 ? slotD / 2 : 0);
-    while (centerX + slotD / 2 <= orientation.L + 1e-9) {
-      const roll = eligible.find((candidate) => !placedIds.has(candidate.id));
-      if (roll) {
-        placed.push({
-          ...roll,
-          x: centerX,
-          y: centerY,
-          r: roll.diameter / 2,
-        });
-        placedIds.add(roll.id);
-      }
-      centerX += slotD;
-    }
-    rowIndex += 1;
-    centerY = slotD / 2 + rowIndex * rowStep;
-  }
-
-  const centeredPlaced = centerPlacedInOrientation(placed, orientation);
-  const remaining = instances.filter((roll) => !placedIds.has(roll.id));
-  const layerHeight = centeredPlaced.length ? Math.max(...centeredPlaced.map((roll) => roll.height)) : 0;
-  return { placed: centeredPlaced, remaining, layerHeight };
+function packLayer(instances, orientation, remainingHeight) {
+  return packLayerCompact(instances, orientation, remainingHeight);
 }
 
-function packLayer(instances, orientation, remainingHeight, packingMethod = DEFAULT_PACKING_METHOD) {
-  return packingMethod === "offset"
-    ? packLayerOffset(instances, orientation, remainingHeight)
-    : packLayerStandard(instances, orientation, remainingHeight);
-}
-
-function packBox(instances, orientation, packingMethod = DEFAULT_PACKING_METHOD) {
+function packBox(instances, orientation) {
   let remaining = [...instances];
   let remainingHeight = orientation.H;
   const layers = [];
 
   while (remaining.length > 0 && remainingHeight > 0) {
-    const layer = packLayer(remaining, orientation, remainingHeight, packingMethod);
+    const layer = packLayer(remaining, orientation, remainingHeight);
     if (!layer.placed.length || layer.layerHeight <= 0 || layer.layerHeight > remainingHeight) break;
     layers.push(layer);
     remaining = layer.remaining;
@@ -431,30 +402,45 @@ function packBox(instances, orientation, packingMethod = DEFAULT_PACKING_METHOD)
     placedCount,
     remaining,
     topViewPlaced: layers[0]?.placed || [],
-    packingMethod,
+    packingMethod: DEFAULT_PACKING_METHOD,
   };
 }
 
-function chooseBestBoxForRemaining(instances, availableBoxes = BOXES, packingMethod = DEFAULT_PACKING_METHOD) {
+function chooseBestBoxForRemaining(instances, availableBoxes = BOXES) {
   if (!instances.length) return null;
   let best = null;
 
   for (const box of availableBoxes) {
-    const orientation = { L: box.l, W: box.w, H: box.h, box };
-    const packed = packBox(instances, orientation, packingMethod);
-    if (packed.placedCount === 0) continue;
+    const permutations = [
+      [box.l, box.w, box.h],
+      [box.l, box.h, box.w],
+      [box.w, box.l, box.h],
+      [box.w, box.h, box.l],
+      [box.h, box.l, box.w],
+      [box.h, box.w, box.l],
+    ];
+    const seen = new Set();
 
-    const candidate = {
-      box,
-      boxName: box.name,
-      orientation,
-      layers: packed.layers,
-      topViewPlaced: packed.topViewPlaced,
-      placedCount: packed.placedCount,
-      fillsAllRemaining: packed.placedCount === instances.length,
-      remaining: packed.remaining,
-      packingMethod: packed.packingMethod,
-    };
+    for (const [L, W, H] of permutations) {
+      const key = `${L}:${W}:${H}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      const orientation = { L, W, H, box };
+      const packed = packBox(instances, orientation);
+      if (packed.placedCount === 0) continue;
+
+      const candidate = {
+        box,
+        boxName: box.name,
+        orientation,
+        layers: packed.layers,
+        topViewPlaced: packed.topViewPlaced,
+        placedCount: packed.placedCount,
+        fillsAllRemaining: packed.placedCount === instances.length,
+        remaining: packed.remaining,
+        packingMethod: packed.packingMethod,
+      };
 
     if (!best) {
       best = candidate;
@@ -467,19 +453,20 @@ function chooseBestBoxForRemaining(instances, availableBoxes = BOXES, packingMet
       (candidate.placedCount === best.placedCount && candidate.box.volume < best.box.volume);
 
     if (better) best = candidate;
+    }
   }
 
   return best;
 }
 
-function buildMultiBoxPlan(rollGroups, availableBoxes = BOXES, packingMethod = DEFAULT_PACKING_METHOD) {
+function buildMultiBoxPlan(rollGroups, availableBoxes = BOXES) {
   let remaining = expandRollInstances(rollGroups);
   const boxes = [];
   let guard = 0;
 
   while (remaining.length > 0 && guard < 200) {
     guard += 1;
-    const best = chooseBestBoxForRemaining(remaining, availableBoxes, packingMethod);
+    const best = chooseBestBoxForRemaining(remaining, availableBoxes);
 
     if (!best || best.placedCount === 0) {
       return { boxes, unpacked: remaining };
@@ -492,7 +479,7 @@ function buildMultiBoxPlan(rollGroups, availableBoxes = BOXES, packingMethod = D
       layers: best.layers,
       topViewPlaced: best.topViewPlaced,
       placedCount: best.placedCount,
-      packingMethod: best.packingMethod,
+      packingMethod: DEFAULT_PACKING_METHOD,
     });
 
     remaining = best.remaining;
@@ -538,7 +525,7 @@ function runTests() {
         return { name: test.name, passed: false, details: parsed?.error || "Could not parse test row." };
       }
       const calculated = calculateRoll(parsed, DEFAULT_CORE_DIAMETER, DEFAULT_CALIPER_MIL, DEFAULT_CLEARANCE, DEFAULT_EXTRA_PERCENT);
-      const plan = buildMultiBoxPlan([calculated], BOXES, DEFAULT_PACKING_METHOD);
+      const plan = buildMultiBoxPlan([calculated], BOXES);
       return {
         name: test.name,
         passed: plan.boxes.length > 0 && plan.unpacked.length === 0,
@@ -825,7 +812,6 @@ function LabelRollBoxCalculator() {
   const [caliperMil, setCaliperMil] = useState(DEFAULT_CALIPER_MIL);
   const [clearance, setClearance] = useState(DEFAULT_CLEARANCE);
   const [extraPercent, setExtraPercent] = useState(DEFAULT_EXTRA_PERCENT);
-  const [packingMethod, setPackingMethod] = useState(DEFAULT_PACKING_METHOD);
   const [repeatEdge, setRepeatEdge] = useState(DEFAULT_REPEAT_EDGE);
   const [selectedBoxIds, setSelectedBoxIds] = useState(DEFAULT_SELECTED_BOX_IDS);
   const [activeTab, setActiveTab] = useState("rolls");
@@ -838,7 +824,7 @@ function LabelRollBoxCalculator() {
     const valid = parsed
       .filter((p) => !p.error)
       .map((p) => calculateRoll(p, Number(coreDiameter), Number(caliperMil), Number(clearance), Number(extraPercent)));
-    const packingPlan = valid.length ? buildMultiBoxPlan(valid, availableBoxes, packingMethod) : { boxes: [], unpacked: [] };
+    const packingPlan = valid.length ? buildMultiBoxPlan(valid, availableBoxes) : { boxes: [], unpacked: [] };
     const boxMix = summarizeBoxMix(packingPlan.boxes);
     const totalRolls = valid.reduce((sum, r) => sum + r.rolls, 0);
     const totalCylinderVolume = valid.reduce((sum, r) => sum + r.totalCylinderVolume, 0);
@@ -855,7 +841,7 @@ function LabelRollBoxCalculator() {
       totalCylinderVolume,
       totalBoundingVolume,
     };
-  }, [rollItems, coreDiameter, caliperMil, clearance, extraPercent, packingMethod, repeatEdge, selectedBoxIds]);
+  }, [rollItems, coreDiameter, caliperMil, clearance, extraPercent, repeatEdge, selectedBoxIds]);
 
   function updateForm(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -1009,10 +995,6 @@ function LabelRollBoxCalculator() {
                       <NumberField label="Total caliper, mil" value={caliperMil} onChange={setCaliperMil} step="0.1" />
                       <NumberField label="Clearance, in" value={clearance} onChange={setClearance} step="0.05" />
                       <NumberField label="Extra amount, %" value={extraPercent} onChange={setExtraPercent} step="0.1" />
-                      <SelectField label="Packing method" value={packingMethod} onChange={setPackingMethod}>
-                        <option value="standard">Standard grid</option>
-                        <option value="offset">Hex / offset rows</option>
-                      </SelectField>
                     </div>
 
                     <div className="space-y-3">
