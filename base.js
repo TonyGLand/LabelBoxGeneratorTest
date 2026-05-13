@@ -867,7 +867,7 @@ function LabelRollBoxCalculator() {
               <h1 className="text-xl font-semibold tracking-tight md:text-2xl">Find the practical box plan for label rolls</h1>
             </div>
             <p className="max-w-3xl text-xs text-slate-600 md:text-right">
-              Add roll groups, calculate diameters, then build a multi-box packing plan.
+              Add roll items, calculate diameters, then build a multi-box packing plan.
             </p>
           </div>
         </header>
@@ -876,7 +876,7 @@ function LabelRollBoxCalculator() {
           <div className="grid gap-3 xl:grid-rows-[350px_minmax(0,1fr)] xl:[height:min(68vh,720px)]">
             <Panel className="p-3">
               <div className="mb-2 flex items-center justify-between gap-3">
-                <h2 className="text-lg font-semibold">Add roll group</h2>
+                <h2 className="text-lg font-semibold">Add roll item</h2>
                 <button
                   type="button"
                   onClick={clearRollItems}
@@ -905,7 +905,7 @@ function LabelRollBoxCalculator() {
                   onClick={addRollItem}
                   className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800"
                 >
-                  Add roll group
+                  Add roll item
                 </button>
                 <button
                   type="button"
