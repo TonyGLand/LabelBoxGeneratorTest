@@ -57,33 +57,39 @@ const EMPTY_FORM = {
 const TEST_CASES = [
   {
     name: "Short edge orientation uses the opposite edge as repeat length",
-    item: { width: 4, height: 3.396, rolls: 2, labelsPerRoll: 500 },
-    expect: { repeat: 4, repeatPitch: 4.25, labelHeight: 3.396, rollHeight: 3.896, rolls: 2, labelsPerRoll: 500 },
+    item: { width: 4, height: 3.396, rolls: 2, totalLabels: 1000 },
+    expect: { repeat: 4, repeatPitch: 4, labelHeight: 3.396, rollHeight: 4.5, rolls: 2, totalLabels: 1000, labelsPerRoll: 500 },
   },
   {
     name: "Tall/narrow label uses the opposite edge from orientation",
-    item: { width: 2, height: 3, rolls: 4, labelsPerRoll: 1000 },
-    expect: { repeat: 3, repeatPitch: 3.25, labelHeight: 2, rollHeight: 2.5, rolls: 4, labelsPerRoll: 1000 },
+    item: { width: 2, height: 3, rolls: 4, totalLabels: 4000 },
+    expect: { repeat: 3, repeatPitch: 3, labelHeight: 2, rollHeight: 3.5, rolls: 4, totalLabels: 4000, labelsPerRoll: 1000 },
   },
   {
     name: "Long edge orientation uses the short edge as repeat length",
-    item: { width: 4, height: 3.396, rolls: 2, labelsPerRoll: 500 },
+    item: { width: 4, height: 3.396, rolls: 2, totalLabels: 1000 },
     repeatEdge: "long",
-    expect: { repeat: 3.396, repeatPitch: 3.646, labelHeight: 4, rollHeight: 4.5, rolls: 2, labelsPerRoll: 500 },
+    expect: { repeat: 3.396, repeatPitch: 3.396, labelHeight: 4, rollHeight: 3.5, rolls: 2, totalLabels: 1000, labelsPerRoll: 500 },
   },
   {
-    name: "Rejects missing labels per roll",
-    item: { width: 4, height: 6, rolls: 1, labelsPerRoll: "" },
+    name: "Rejects missing total labels",
+    item: { width: 4, height: 6, rolls: 1, totalLabels: "" },
     expectError: true,
   },
   {
     name: "Rejects zero rolls",
-    item: { width: 4, height: 6, rolls: 0, labelsPerRoll: 500 },
+    item: { width: 4, height: 6, rolls: 0, totalLabels: 1000 },
     expectError: true,
   },
   {
+    name: "Three 3x3 rolls fit in 15 x 10 x 4",
+    item: { width: 3, height: 3, rolls: 3, totalLabels: 2500 },
+    expectPackingPlan: true,
+    expectBoxName: "15 x 10 x 4",
+  },
+  {
     name: "Large order produces a multi-box plan",
-    item: { width: 4, height: 3.396, rolls: 40, labelsPerRoll: 500 },
+    item: { width: 4, height: 3.396, rolls: 40, totalLabels: 20000 },
     expectPackingPlan: true,
   },
 ];
@@ -142,13 +148,8 @@ function normalizeRollInput(item, repeatEdgeChoice = item.repeatEdge || DEFAULT_
   const width = Number(item.width);
   const height = Number(item.height);
   const rolls = Number(item.rolls);
-
-  const totalLabels = Number(
-    String(item.totalLabels ?? item.labelsPerRoll).replace(/,/g, "")
-  );
-
+  const totalLabels = Number(String(item.totalLabels ?? "").replace(/,/g, ""));
   const labelsPerRoll = totalLabels / rolls;
-
   const repeatEdge = repeatEdgeChoice === "long" ? "long" : "short";
 
   if (!Number.isFinite(width) || width <= 0) {
@@ -164,22 +165,19 @@ function normalizeRollInput(item, repeatEdgeChoice = item.repeatEdge || DEFAULT_
   }
 
   if (!Number.isFinite(totalLabels) || totalLabels <= 0) {
-    return { raw: item, error: "Total labels must be a positive number." };
+    return { raw: item, error: "Total label quantity must be a positive number." };
   }
 
   if (!Number.isFinite(labelsPerRoll) || labelsPerRoll <= 0) {
-    return { raw: item, error: "Labels per roll must be a positive number." };
+    return { raw: item, error: "Total labels divided by rolls must be a positive number." };
   }
 
   const shortEdge = Math.min(width, height);
   const longEdge = Math.max(width, height);
-
   const labelHeight = repeatEdge === "long" ? longEdge : shortEdge;
   const repeat = repeatEdge === "long" ? shortEdge : longEdge;
-
   const coreSizeBase = repeat + 0.25;
   const coreSize = Math.round(coreSizeBase * 2) / 2;
-
   const rollHeight = coreSize;
   const repeatPitch = repeat + DEFAULT_LABEL_GAP;
 
@@ -201,15 +199,7 @@ function normalizeRollInput(item, repeatEdgeChoice = item.repeatEdge || DEFAULT_
     rolls,
     totalLabels,
     labelsPerRoll,
-
-    description:
-      `${formatNumber(width)} x ${formatNumber(height)} - ` +
-      `${REPEAT_EDGE_LABELS[repeatEdge].toLowerCase()} orientation, ` +
-      `${rolls} roll${rolls === 1 ? "" : "s"}, ` +
-      `${totalLabels.toLocaleString()} total labels ` +
-      `(${labelsPerRoll.toLocaleString(undefined, {
-        maximumFractionDigits: 2,
-      })} labels/roll)`,
+    description: `${formatNumber(width)} x ${formatNumber(height)} - ${REPEAT_EDGE_LABELS[repeatEdge].toLowerCase()} orientation, ${rolls} roll${rolls === 1 ? "" : "s"}, ${totalLabels.toLocaleString()} total labels (${labelsPerRoll.toLocaleString(undefined, { maximumFractionDigits: 2 })} labels/roll)`,
   };
 }
 
@@ -380,12 +370,7 @@ function packLayerCompact(instances, orientation, remainingHeight) {
 
   for (const roll of eligible) {
     const radius = roll.diameter / 2;
-
-    const candidates = buildCandidateCenters(
-      placed,
-      orientation,
-      radius
-    );
+    const candidates = buildCandidateCenters(placed, orientation, radius);
 
     let bestPoint = null;
     let bestArea = Number.POSITIVE_INFINITY;
@@ -394,27 +379,15 @@ function packLayerCompact(instances, orientation, remainingHeight) {
     for (const point of candidates) {
       if (!canPlaceAt(point, radius, placed)) continue;
 
-      const area = getBoundingRectArea(
-        placed,
-        point,
-        radius
-      );
+      const area = getBoundingRectArea(placed, point, radius);
 
-      // IMPORTANT:
-      // Prefer wall/corner packing instead of center packing.
-      // This enables:
-      // top-left
-      // top-right
-      // bottom-center triangle layouts.
-
+      // Prefer top/left wall packing on equal-area ties.
+      // Center-first packing blocks 3-roll triangle layouts.
       const wallBias = point.y * 1000 + point.x;
 
       if (
         area < bestArea - 1e-9 ||
-        (
-          Math.abs(area - bestArea) <= 1e-9 &&
-          wallBias < bestWallBias
-        )
+        (Math.abs(area - bestArea) <= 1e-9 && wallBias < bestWallBias)
       ) {
         bestArea = area;
         bestWallBias = wallBias;
@@ -423,37 +396,16 @@ function packLayerCompact(instances, orientation, remainingHeight) {
     }
 
     if (bestPoint) {
-      placed.push({
-        ...roll,
-        x: bestPoint.x,
-        y: bestPoint.y,
-        r: radius,
-      });
-
+      placed.push({ ...roll, x: bestPoint.x, y: bestPoint.y, r: radius });
       placedIds.add(roll.id);
     }
   }
 
-  const centeredPlaced = centerPlacedInOrientation(
-    placed,
-    orientation
-  );
+  const centeredPlaced = centerPlacedInOrientation(placed, orientation);
+  const remaining = instances.filter((roll) => !placedIds.has(roll.id));
+  const layerHeight = centeredPlaced.length ? Math.max(...centeredPlaced.map((roll) => roll.height)) : 0;
 
-  const remaining = instances.filter(
-    (roll) => !placedIds.has(roll.id)
-  );
-
-  const layerHeight = centeredPlaced.length
-    ? Math.max(
-        ...centeredPlaced.map((roll) => roll.height)
-      )
-    : 0;
-
-  return {
-    placed: centeredPlaced,
-    remaining,
-    layerHeight,
-  };
+  return { placed: centeredPlaced, remaining, layerHeight };
 }
 
 function packLayer(instances, orientation, remainingHeight) {
@@ -807,7 +759,8 @@ function RollCalculationsTable({ rolls, onRemove }) {
             <th className="p-3">Height</th>
             <th className="p-3">Core size</th>
             <th className="p-3">Rolls</th>
-            <th className="p-3">Total labels</th>
+            <th className="p-3">Total quantity</th>
+            <th className="p-3">Labels / roll</th>
             <th className="p-3">Orientation</th>
             <th className="p-3">Diameter</th>
             <th className="p-3">Eff. size</th>
@@ -822,7 +775,8 @@ function RollCalculationsTable({ rolls, onRemove }) {
               <td className="p-3">{formatNumber(roll.height)}&quot;</td>
               <td className="p-3">{formatNumber(roll.coreSize)}&quot;</td>
               <td className="p-3">{roll.rolls}</td>
-              <td className="break-words p-3">{roll.totalLabels.toLocaleString()}
+              <td className="break-words p-3">{roll.totalLabels.toLocaleString()}</td>
+              <td className="break-words p-3">{formatNumber(roll.labelsPerRoll, 0)}</td>
               <td className="break-words p-3">{roll.repeatEdgeLabel}</td>
               <td className="p-3 font-semibold">{formatNumber(roll.outerDiameter)}&quot;</td>
               <td className="break-words p-3">{formatNumber(roll.effectiveDiameter)} x {formatNumber(roll.effectiveHeight)}</td>
@@ -1000,7 +954,7 @@ function LabelRollBoxCalculator() {
                 <NumberField label="Width, in" value={form.width} onChange={(v) => updateForm("width", v)} />
                 <NumberField label="Height, in" value={form.height} onChange={(v) => updateForm("height", v)} />
                 <NumberField label="# of rolls" value={form.rolls} onChange={(v) => updateForm("rolls", v)} step="1" />
-                <NumberField label="Total Labels" value={form.totalLabels} onChange={(v) => updateForm("totalLabels", v)} step="1" />
+                <NumberField label="Total labels" value={form.totalLabels} onChange={(v) => updateForm("totalLabels", v)} step="1" />
                 <SelectField label="Orientation" value={repeatEdge} onChange={setRepeatEdge}>
                   <option value="short">Short edge comes off</option>
                   <option value="long">Long edge comes off</option>
