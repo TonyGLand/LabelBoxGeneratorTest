@@ -15,8 +15,22 @@ const REPEAT_EDGE_LABELS = {
 };
 
 const PACKING_METHOD_LABELS = {
+  best: "Best Fit",
   compact: "Compact candidate placement",
 };
+
+function getPackingMethodDisplayLabel(selectedMethod = "best", actualMethod = DEFAULT_PACKING_METHOD) {
+  const actualLabel =
+    PACKING_METHOD_LABELS[actualMethod] ||
+    PACKING_METHOD_LABELS[DEFAULT_PACKING_METHOD] ||
+    actualMethod;
+
+  if (selectedMethod === "best") {
+    return `Best Fit (${actualLabel})`;
+  }
+
+  return actualLabel;
+}
 
 const BOXES = [
   [5, 5, 4],
@@ -82,7 +96,7 @@ const TEST_CASES = [
     expectError: true,
   },
   {
-    name: "Three 3x3 rolls fit in 15 x 10 x 4",
+    name: "Three 3x3 rolls at 2500 total labels fit in 15 x 10 x 4",
     item: { width: 3, height: 3, rolls: 3, totalLabels: 2500 },
     expectPackingPlan: true,
     expectBoxName: "15 x 10 x 4",
@@ -353,6 +367,60 @@ function getBoundingRectArea(placed, point, radius) {
   return (maxX - minX) * (maxY - minY);
 }
 
+function getBoundingRect(placed, point = null, radius = 0) {
+  const circles = point ? [...placed, { x: point.x, y: point.y, r: radius }] : placed;
+
+  if (!circles.length) {
+    return { minX: 0, maxX: 0, minY: 0, maxY: 0, width: 0, height: 0, area: 0 };
+  }
+
+  const minX = Math.min(...circles.map((roll) => roll.x - roll.r));
+  const maxX = Math.max(...circles.map((roll) => roll.x + roll.r));
+  const minY = Math.min(...circles.map((roll) => roll.y - roll.r));
+  const maxY = Math.max(...circles.map((roll) => roll.y + roll.r));
+  const width = maxX - minX;
+  const height = maxY - minY;
+
+  return { minX, maxX, minY, maxY, width, height, area: width * height };
+}
+
+function countFuturePlacements(remainingRolls, seededPlaced, orientation) {
+  const placed = [...seededPlaced];
+  let count = 0;
+
+  for (const roll of remainingRolls) {
+    const radius = roll.diameter / 2;
+    const candidates = buildCandidateCenters(placed, orientation, radius);
+
+    let bestPoint = null;
+    let bestArea = Number.POSITIVE_INFINITY;
+    let bestWallBias = Number.POSITIVE_INFINITY;
+
+    for (const point of candidates) {
+      if (!canPlaceAt(point, radius, placed)) continue;
+
+      const bounds = getBoundingRect(placed, point, radius);
+      const wallBias = point.y * 1000 + point.x;
+
+      if (
+        bounds.area < bestArea - 1e-9 ||
+        (Math.abs(bounds.area - bestArea) <= 1e-9 && wallBias < bestWallBias)
+      ) {
+        bestArea = bounds.area;
+        bestWallBias = wallBias;
+        bestPoint = point;
+      }
+    }
+
+    if (bestPoint) {
+      placed.push({ ...roll, x: bestPoint.x, y: bestPoint.y, r: radius });
+      count += 1;
+    }
+  }
+
+  return count;
+}
+
 function packLayerCompact(instances, orientation, remainingHeight) {
   const eligible = instances.filter(
     (roll) =>
@@ -369,27 +437,44 @@ function packLayerCompact(instances, orientation, remainingHeight) {
   const placedIds = new Set();
 
   for (const roll of eligible) {
+    if (placedIds.has(roll.id)) continue;
+
     const radius = roll.diameter / 2;
     const candidates = buildCandidateCenters(placed, orientation, radius);
+    const remainingAfterThisRoll = eligible.filter(
+      (candidate) => !placedIds.has(candidate.id) && candidate.id !== roll.id
+    );
 
     let bestPoint = null;
+    let bestFutureCount = Number.NEGATIVE_INFINITY;
     let bestArea = Number.POSITIVE_INFINITY;
+    let bestHeight = Number.POSITIVE_INFINITY;
+    let bestWidth = Number.POSITIVE_INFINITY;
     let bestWallBias = Number.POSITIVE_INFINITY;
 
     for (const point of candidates) {
       if (!canPlaceAt(point, radius, placed)) continue;
 
-      const area = getBoundingRectArea(placed, point, radius);
+      const trialPlaced = [...placed, { ...roll, x: point.x, y: point.y, r: radius }];
+      const futureCount = countFuturePlacements(remainingAfterThisRoll, trialPlaced, orientation);
+      const bounds = getBoundingRect(placed, point, radius);
 
-      // Prefer top/left wall packing on equal-area ties.
-      // Center-first packing blocks 3-roll triangle layouts.
+      // Final tie-breaker prefers top/left wall packing.
+      // Main priority is future roll count, which lets the 2nd roll move to the far wall
+      // so the 3rd roll can fit below between the first two rolls.
       const wallBias = point.y * 1000 + point.x;
 
       if (
-        area < bestArea - 1e-9 ||
-        (Math.abs(area - bestArea) <= 1e-9 && wallBias < bestWallBias)
+        futureCount > bestFutureCount ||
+        (futureCount === bestFutureCount && bounds.area < bestArea - 1e-9) ||
+        (futureCount === bestFutureCount && Math.abs(bounds.area - bestArea) <= 1e-9 && bounds.height < bestHeight - 1e-9) ||
+        (futureCount === bestFutureCount && Math.abs(bounds.area - bestArea) <= 1e-9 && Math.abs(bounds.height - bestHeight) <= 1e-9 && bounds.width < bestWidth - 1e-9) ||
+        (futureCount === bestFutureCount && Math.abs(bounds.area - bestArea) <= 1e-9 && Math.abs(bounds.height - bestHeight) <= 1e-9 && Math.abs(bounds.width - bestWidth) <= 1e-9 && wallBias < bestWallBias)
       ) {
-        bestArea = area;
+        bestFutureCount = futureCount;
+        bestArea = bounds.area;
+        bestHeight = bounds.height;
+        bestWidth = bounds.width;
         bestWallBias = wallBias;
         bestPoint = point;
       }
@@ -499,7 +584,7 @@ function buildMultiBoxPlan(rollGroups, availableBoxes = BOXES) {
     const best = chooseBestBoxForRemaining(remaining, availableBoxes);
 
     if (!best || best.placedCount === 0) {
-      return { boxes, unpacked: remaining };
+      return { boxes, unpacked: remaining, selectedPackingMethod: DEFAULT_PACKING_METHOD };
     }
 
     boxes.push({
@@ -515,7 +600,7 @@ function buildMultiBoxPlan(rollGroups, availableBoxes = BOXES) {
     remaining = best.remaining;
   }
 
-  return { boxes, unpacked: remaining };
+  return { boxes, unpacked: remaining, selectedPackingMethod: DEFAULT_PACKING_METHOD };
 }
 
 function summarizeBoxMix(boxes) {
@@ -607,7 +692,7 @@ function MultiBoxPackingDiagram({ packingPlan }) {
   const layerViewW = 170;
   const layerViewH = 220;
   const layerScaleY = layerViewH / orientation.H;
-  const packingLabel = PACKING_METHOD_LABELS[current.packingMethod || DEFAULT_PACKING_METHOD] || PACKING_METHOD_LABELS[DEFAULT_PACKING_METHOD];
+  const packingLabel = getPackingMethodDisplayLabel("best", packingPlan.selectedPackingMethod || current.packingMethod || DEFAULT_PACKING_METHOD);
   const usesPadSeparator =
     current?.box?.l === 24 && current?.box?.w === 16 && (current?.box?.h === 8 || current?.box?.h === 12);
 
@@ -819,7 +904,7 @@ function BoxSummary({ packingPlan }) {
               Box volume: {formatNumber(boxSetup.orientation.L * boxSetup.orientation.W * boxSetup.orientation.H, 0)} cu/in
             </div>
             <div className="mt-1 text-xs text-slate-500">
-              Packing: {PACKING_METHOD_LABELS[boxSetup.packingMethod || DEFAULT_PACKING_METHOD]}
+              Packing: {getPackingMethodDisplayLabel("best", boxSetup.packingMethod || DEFAULT_PACKING_METHOD)}
             </div>
             <div className="mt-1 text-xs text-slate-500">Layers used: {boxSetup.layers.length}</div>
             <div className="mt-2 space-y-1">
@@ -1067,11 +1152,7 @@ function LabelRollBoxCalculator() {
           </div>
         </div>
 
-        <Panel className="space-y-3 p-3">
-          <div className="flex items-center gap-2 text-lg font-semibold">
-            <span>Shipment plan</span>
-          </div>
-
+        <Panel className="p-3">
           {result.errors.length > 0 && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
               <div className="font-semibold">Fix these roll rows</div>
@@ -1085,6 +1166,7 @@ function LabelRollBoxCalculator() {
 
           <div className="grid items-start gap-3 xl:grid-cols-[360px_minmax(0,1fr)]">
             <div className="space-y-3">
+              <h2 className="text-lg font-semibold">Shipment plan</h2>
               {result.valid.length === 0 ? (
                 <div className="rounded-2xl bg-slate-100 p-4 text-slate-600">Add at least one valid roll group.</div>
               ) : result.availableBoxes.length === 0 ? (

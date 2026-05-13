@@ -1,14 +1,9 @@
-    width,
-    height,
-    dimA: width,
-    dimB: height,
-    repeatEdge,
-    repeatEdgeLabel: REPEAT_EDGE_LABELS[repeatEdge],
     repeat,
     repeatPitch,
     labelGap: DEFAULT_LABEL_GAP,
     labelHeight,
     coreHeightOverhang: DEFAULT_CORE_HEIGHT_OVERHANG,
+    coreSize,
     rollHeight,
     rolls,
     totalLabels,
@@ -28,7 +23,7 @@ function calculateRoll(item, coreDiameter, caliperMil, clearance, extraPercent =
   const woundLength = repeatPitch * effectiveLabelsPerRoll;
   const outerDiameter = Math.sqrt(safeCoreDiameter ** 2 + (4 * woundLength * caliperInches) / Math.PI);
   const effectiveDiameter = outerDiameter + safeClearance;
-  const effectiveHeight = item.rollHeight;
+  const effectiveHeight = item.rollHeight + safeClearance;
   const cylinderVolume = Math.PI * (outerDiameter / 2) ** 2 * item.rollHeight;
   const boundingVolume = effectiveDiameter * effectiveDiameter * effectiveHeight;
 
@@ -73,8 +68,7 @@ function expandRollInstances(rollGroups) {
   return instances.sort((a, b) => b.diameter - a.diameter);
 }
 
-
-function centerPlacedInBox(placed, orientation) {
+function centerPlacedInOrientation(placed, orientation) {
   if (!placed.length) return placed;
   const minX = Math.min(...placed.map((roll) => roll.x - roll.r));
   const maxX = Math.max(...placed.map((roll) => roll.x + roll.r));
@@ -84,7 +78,6 @@ function centerPlacedInBox(placed, orientation) {
   const offsetY = (orientation.W - (maxY - minY)) / 2 - minY;
   return placed.map((roll) => ({ ...roll, x: roll.x + offsetX, y: roll.y + offsetY }));
 }
-
 
 function buildCandidateCenters(placed, orientation, radius, epsilon = 1e-6) {
   const candidates = [
@@ -124,9 +117,11 @@ function buildCandidateCenters(placed, orientation, radius, epsilon = 1e-6) {
       if (centerDistance < epsilon) continue;
       if (centerDistance > targetA + targetB + epsilon) continue;
       if (centerDistance < Math.abs(targetA - targetB) - epsilon) continue;
+
       const axis = (targetA ** 2 - targetB ** 2 + centerDistance ** 2) / (2 * centerDistance);
       const perpendicularSquared = targetA ** 2 - axis ** 2;
       if (perpendicularSquared < -epsilon) continue;
+
       const perpendicular = Math.sqrt(Math.max(0, perpendicularSquared));
       const ux = dx / centerDistance;
       const uy = dy / centerDistance;
@@ -158,104 +153,53 @@ function canPlaceAt(point, radius, placed, epsilon = 1e-6) {
   });
 }
 
-function packLayerStandard(instances, orientation, remainingHeight) {
-  const eligible = instances.filter((roll) => roll.height <= remainingHeight && roll.diameter <= orientation.L && roll.diameter <= orientation.W);
-  if (!eligible.length) return { placed: [], remaining: instances, layerHeight: 0 };
+function getBoundingRectArea(placed, point, radius) {
+  const circles = [...placed, { x: point.x, y: point.y, r: radius }];
+  const minX = Math.min(...circles.map((roll) => roll.x - roll.r));
+  const maxX = Math.max(...circles.map((roll) => roll.x + roll.r));
+  const minY = Math.min(...circles.map((roll) => roll.y - roll.r));
+  const maxY = Math.max(...circles.map((roll) => roll.y + roll.r));
+  return (maxX - minX) * (maxY - minY);
+}
 
-  const placed = [];
-  const placedIds = new Set();
+function getBoundingRect(placed, point = null, radius = 0) {
+  const circles = point ? [...placed, { x: point.x, y: point.y, r: radius }] : placed;
 
-  for (const roll of eligible) {
+  if (!circles.length) {
+    return { minX: 0, maxX: 0, minY: 0, maxY: 0, width: 0, height: 0, area: 0 };
+  }
+
+  const minX = Math.min(...circles.map((roll) => roll.x - roll.r));
+  const maxX = Math.max(...circles.map((roll) => roll.x + roll.r));
+  const minY = Math.min(...circles.map((roll) => roll.y - roll.r));
+  const maxY = Math.max(...circles.map((roll) => roll.y + roll.r));
+  const width = maxX - minX;
+  const height = maxY - minY;
+
+  return { minX, maxX, minY, maxY, width, height, area: width * height };
+}
+
+function countFuturePlacements(remainingRolls, seededPlaced, orientation) {
+  const placed = [...seededPlaced];
+  let count = 0;
+
+  for (const roll of remainingRolls) {
     const radius = roll.diameter / 2;
     const candidates = buildCandidateCenters(placed, orientation, radius);
+
     let bestPoint = null;
-    let bestScore = Number.NEGATIVE_INFINITY;
+    let bestArea = Number.POSITIVE_INFINITY;
+    let bestWallBias = Number.POSITIVE_INFINITY;
 
     for (const point of candidates) {
       if (!canPlaceAt(point, radius, placed)) continue;
-      const nearestWall = Math.min(point.x - radius, orientation.L - radius - point.x, point.y - radius, orientation.W - radius - point.y);
-      const centerBias = -Math.hypot(point.x - orientation.L / 2, point.y - orientation.W / 2);
-      const score = nearestWall * 5 + centerBias;
-      if (score > bestScore) {
-        bestScore = score;
-        bestPoint = point;
-      }
-    }
 
-    if (bestPoint) {
-      placed.push({ ...roll, x: bestPoint.x, y: bestPoint.y, r: radius });
-      placedIds.add(roll.id);
-    }
-  }
+      const bounds = getBoundingRect(placed, point, radius);
+      const wallBias = point.y * 1000 + point.x;
 
-  const centeredPlaced = centerPlacedInBox(placed, orientation);
-  const remaining = instances.filter((roll) => !placedIds.has(roll.id));
-  const layerHeight = centeredPlaced.length ? Math.max(...centeredPlaced.map((roll) => roll.height)) : 0;
-  return { placed: centeredPlaced, remaining, layerHeight };
-}
-
-function packLayerOffset(instances, orientation, remainingHeight) {
-  const eligible = instances.filter((roll) => roll.height <= remainingHeight && roll.diameter <= orientation.L && roll.diameter <= orientation.W);
-  if (!eligible.length) return { placed: [], remaining: instances, layerHeight: 0 };
-
-  const placed = [];
-  const placedIds = new Set();
-  const slotD = Math.max(...eligible.map((roll) => roll.diameter));
-  const rowStep = slotD * Math.sqrt(3) / 2;
-  let rowIndex = 0;
-  let centerY = slotD / 2;
-
-  while (centerY + slotD / 2 <= orientation.W + 1e-9) {
-    let centerX = slotD / 2 + (rowIndex % 2 ? slotD / 2 : 0);
-    while (centerX + slotD / 2 <= orientation.L + 1e-9) {
-      const roll = eligible.find((candidate) => !placedIds.has(candidate.id));
-      if (roll) {
-        placed.push({
-          ...roll,
-          x: centerX,
-          y: centerY,
-          r: roll.diameter / 2,
-        });
-        placedIds.add(roll.id);
-      }
-      centerX += slotD;
-    }
-    rowIndex += 1;
-    centerY = slotD / 2 + rowIndex * rowStep;
-  }
-
-  const centeredPlaced = centerPlacedInBox(placed, orientation);
-  const remaining = instances.filter((roll) => !placedIds.has(roll.id));
-  const layerHeight = centeredPlaced.length ? Math.max(...centeredPlaced.map((roll) => roll.height)) : 0;
-  return { placed: centeredPlaced, remaining, layerHeight };
-}
-
-function packLayer(instances, orientation, remainingHeight, packingMethod = DEFAULT_PACKING_METHOD) {
-  return packingMethod === "offset"
-    ? packLayerOffset(instances, orientation, remainingHeight)
-    : packLayerStandard(instances, orientation, remainingHeight);
-}
-
-function packBox(instances, orientation, packingMethod = DEFAULT_PACKING_METHOD) {
-  let remaining = [...instances];
-  let remainingHeight = orientation.H;
-  const layers = [];
-
-  while (remaining.length > 0 && remainingHeight > 0) {
-    const layer = packLayer(remaining, orientation, remainingHeight, packingMethod);
-    if (!layer.placed.length || layer.layerHeight <= 0 || layer.layerHeight > remainingHeight) break;
-    layers.push(layer);
-    remaining = layer.remaining;
-    remainingHeight -= layer.layerHeight;
-  }
-
-  const placedCount = layers.reduce((sum, layer) => sum + layer.placed.length, 0);
-  return {
-    orientation,
-    layers,
-    placedCount,
-    remaining,
-    topViewPlaced: layers[0]?.placed || [],
-    packingMethod,
-  };
-}
+      if (
+        bounds.area < bestArea - 1e-9 ||
+        (Math.abs(bounds.area - bestArea) <= 1e-9 && wallBias < bestWallBias)
+      ) {
+        bestArea = bounds.area;
+        bestWallBias = wallBias;

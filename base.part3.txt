@@ -1,24 +1,151 @@
+        bestPoint = point;
+      }
+    }
 
-function chooseBestBoxForRemaining(instances, availableBoxes = BOXES, packingMethod = DEFAULT_PACKING_METHOD) {
+    if (bestPoint) {
+      placed.push({ ...roll, x: bestPoint.x, y: bestPoint.y, r: radius });
+      count += 1;
+    }
+  }
+
+  return count;
+}
+
+function packLayerCompact(instances, orientation, remainingHeight) {
+  const eligible = instances.filter(
+    (roll) =>
+      roll.height <= remainingHeight &&
+      roll.diameter <= orientation.L &&
+      roll.diameter <= orientation.W
+  );
+
+  if (!eligible.length) {
+    return { placed: [], remaining: instances, layerHeight: 0 };
+  }
+
+  const placed = [];
+  const placedIds = new Set();
+
+  for (const roll of eligible) {
+    if (placedIds.has(roll.id)) continue;
+
+    const radius = roll.diameter / 2;
+    const candidates = buildCandidateCenters(placed, orientation, radius);
+    const remainingAfterThisRoll = eligible.filter(
+      (candidate) => !placedIds.has(candidate.id) && candidate.id !== roll.id
+    );
+
+    let bestPoint = null;
+    let bestFutureCount = Number.NEGATIVE_INFINITY;
+    let bestArea = Number.POSITIVE_INFINITY;
+    let bestHeight = Number.POSITIVE_INFINITY;
+    let bestWidth = Number.POSITIVE_INFINITY;
+    let bestWallBias = Number.POSITIVE_INFINITY;
+
+    for (const point of candidates) {
+      if (!canPlaceAt(point, radius, placed)) continue;
+
+      const trialPlaced = [...placed, { ...roll, x: point.x, y: point.y, r: radius }];
+      const futureCount = countFuturePlacements(remainingAfterThisRoll, trialPlaced, orientation);
+      const bounds = getBoundingRect(placed, point, radius);
+
+      // Final tie-breaker prefers top/left wall packing.
+      // Main priority is future roll count, which lets the 2nd roll move to the far wall
+      // so the 3rd roll can fit below between the first two rolls.
+      const wallBias = point.y * 1000 + point.x;
+
+      if (
+        futureCount > bestFutureCount ||
+        (futureCount === bestFutureCount && bounds.area < bestArea - 1e-9) ||
+        (futureCount === bestFutureCount && Math.abs(bounds.area - bestArea) <= 1e-9 && bounds.height < bestHeight - 1e-9) ||
+        (futureCount === bestFutureCount && Math.abs(bounds.area - bestArea) <= 1e-9 && Math.abs(bounds.height - bestHeight) <= 1e-9 && bounds.width < bestWidth - 1e-9) ||
+        (futureCount === bestFutureCount && Math.abs(bounds.area - bestArea) <= 1e-9 && Math.abs(bounds.height - bestHeight) <= 1e-9 && Math.abs(bounds.width - bestWidth) <= 1e-9 && wallBias < bestWallBias)
+      ) {
+        bestFutureCount = futureCount;
+        bestArea = bounds.area;
+        bestHeight = bounds.height;
+        bestWidth = bounds.width;
+        bestWallBias = wallBias;
+        bestPoint = point;
+      }
+    }
+
+    if (bestPoint) {
+      placed.push({ ...roll, x: bestPoint.x, y: bestPoint.y, r: radius });
+      placedIds.add(roll.id);
+    }
+  }
+
+  const centeredPlaced = centerPlacedInOrientation(placed, orientation);
+  const remaining = instances.filter((roll) => !placedIds.has(roll.id));
+  const layerHeight = centeredPlaced.length ? Math.max(...centeredPlaced.map((roll) => roll.height)) : 0;
+
+  return { placed: centeredPlaced, remaining, layerHeight };
+}
+
+function packLayer(instances, orientation, remainingHeight) {
+  return packLayerCompact(instances, orientation, remainingHeight);
+}
+
+function packBox(instances, orientation) {
+  let remaining = [...instances];
+  let remainingHeight = orientation.H;
+  const layers = [];
+
+  while (remaining.length > 0 && remainingHeight > 0) {
+    const layer = packLayer(remaining, orientation, remainingHeight);
+    if (!layer.placed.length || layer.layerHeight <= 0 || layer.layerHeight > remainingHeight) break;
+    layers.push(layer);
+    remaining = layer.remaining;
+    remainingHeight -= layer.layerHeight;
+  }
+
+  const placedCount = layers.reduce((sum, layer) => sum + layer.placed.length, 0);
+  return {
+    orientation,
+    layers,
+    placedCount,
+    remaining,
+    topViewPlaced: layers[0]?.placed || [],
+    packingMethod: DEFAULT_PACKING_METHOD,
+  };
+}
+
+function chooseBestBoxForRemaining(instances, availableBoxes = BOXES) {
   if (!instances.length) return null;
   let best = null;
 
   for (const box of availableBoxes) {
-    const orientation = { L: box.l, W: box.w, H: box.h, box };
-    const packed = packBox(instances, orientation, packingMethod);
-    if (packed.placedCount === 0) continue;
+    const permutations = [
+      [box.l, box.w, box.h],
+      [box.l, box.h, box.w],
+      [box.w, box.l, box.h],
+      [box.w, box.h, box.l],
+      [box.h, box.l, box.w],
+      [box.h, box.w, box.l],
+    ];
+    const seen = new Set();
 
-    const candidate = {
-      box,
-      boxName: box.name,
-      orientation,
-      layers: packed.layers,
-      topViewPlaced: packed.topViewPlaced,
-      placedCount: packed.placedCount,
-      fillsAllRemaining: packed.placedCount === instances.length,
-      remaining: packed.remaining,
-      packingMethod: packed.packingMethod,
-    };
+    for (const [L, W, H] of permutations) {
+      const key = `${L}:${W}:${H}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      const orientation = { L, W, H, box };
+      const packed = packBox(instances, orientation);
+      if (packed.placedCount === 0) continue;
+
+      const candidate = {
+        box,
+        boxName: box.name,
+        orientation,
+        layers: packed.layers,
+        topViewPlaced: packed.topViewPlaced,
+        placedCount: packed.placedCount,
+        fillsAllRemaining: packed.placedCount === instances.length,
+        remaining: packed.remaining,
+        packingMethod: packed.packingMethod,
+      };
 
     if (!best) {
       best = candidate;
@@ -31,22 +158,23 @@ function chooseBestBoxForRemaining(instances, availableBoxes = BOXES, packingMet
       (candidate.placedCount === best.placedCount && candidate.box.volume < best.box.volume);
 
     if (better) best = candidate;
+    }
   }
 
   return best;
 }
 
-function buildMultiBoxPlan(rollGroups, availableBoxes = BOXES, packingMethod = DEFAULT_PACKING_METHOD) {
+function buildMultiBoxPlan(rollGroups, availableBoxes = BOXES) {
   let remaining = expandRollInstances(rollGroups);
   const boxes = [];
   let guard = 0;
 
   while (remaining.length > 0 && guard < 200) {
     guard += 1;
-    const best = chooseBestBoxForRemaining(remaining, availableBoxes, packingMethod);
+    const best = chooseBestBoxForRemaining(remaining, availableBoxes);
 
     if (!best || best.placedCount === 0) {
-      return { boxes, unpacked: remaining };
+      return { boxes, unpacked: remaining, selectedPackingMethod: DEFAULT_PACKING_METHOD };
     }
 
     boxes.push({
@@ -56,39 +184,13 @@ function buildMultiBoxPlan(rollGroups, availableBoxes = BOXES, packingMethod = D
       layers: best.layers,
       topViewPlaced: best.topViewPlaced,
       placedCount: best.placedCount,
-      packingMethod: best.packingMethod,
+      packingMethod: DEFAULT_PACKING_METHOD,
     });
 
     remaining = best.remaining;
   }
 
-  return { boxes, unpacked: remaining };
-}
-
-
-function getPackingPlanScore(plan) {
-  const unpackedCount = plan.unpacked.length;
-  const boxCount = plan.boxes.length;
-  const totalBoxVolume = plan.boxes.reduce((sum, setup) => sum + (setup.box?.volume || 0), 0);
-  return { unpackedCount, boxCount, totalBoxVolume };
-}
-
-function chooseAutoPackingPlan(rollGroups, availableBoxes = BOXES) {
-  const standardPlan = buildMultiBoxPlan(rollGroups, availableBoxes, "standard");
-  const offsetPlan = buildMultiBoxPlan(rollGroups, availableBoxes, "offset");
-  const standardScore = getPackingPlanScore(standardPlan);
-  const offsetScore = getPackingPlanScore(offsetPlan);
-
-  const useStandard =
-    standardScore.unpackedCount < offsetScore.unpackedCount ||
-    (standardScore.unpackedCount === offsetScore.unpackedCount && standardScore.boxCount < offsetScore.boxCount) ||
-    (standardScore.unpackedCount === offsetScore.unpackedCount && standardScore.boxCount === offsetScore.boxCount && standardScore.totalBoxVolume <= offsetScore.totalBoxVolume);
-
-  const chosenPlan = useStandard ? standardPlan : offsetPlan;
-  return {
-    ...chosenPlan,
-    selectedPackingMethod: useStandard ? "standard" : "offset",
-  };
+  return { boxes, unpacked: remaining, selectedPackingMethod: DEFAULT_PACKING_METHOD };
 }
 
 function summarizeBoxMix(boxes) {
@@ -101,109 +203,3 @@ function summarizeBoxMix(boxes) {
 }
 
 function summarizeLayerRollLabels(rolls) {
-  const counts = new Map();
-  rolls.forEach((roll) => {
-    counts.set(roll.label, (counts.get(roll.label) || 0) + 1);
-  });
-
-  return Array.from(counts.entries())
-    .map(([label, count]) => (count === 1 ? label : `${label} (${count})`))
-    .join(", ");
-}
-
-function runTests() {
-  return TEST_CASES.map((test) => {
-    const parsed = normalizeRollInput(test.item, test.repeatEdge);
-
-    if (test.expectError) {
-      return {
-        name: test.name,
-        passed: Boolean(parsed && parsed.error),
-        details: parsed?.error || "Expected an error but parsed successfully.",
-      };
-    }
-
-    if (test.expectPackingPlan) {
-      if (!parsed || parsed.error) {
-        return { name: test.name, passed: false, details: parsed?.error || "Could not parse test row." };
-      }
-      const calculated = calculateRoll(parsed, DEFAULT_CORE_DIAMETER, DEFAULT_CALIPER_MIL, DEFAULT_CLEARANCE, DEFAULT_EXTRA_PERCENT);
-      const plan = buildMultiBoxPlan([calculated], BOXES, DEFAULT_PACKING_METHOD);
-      return {
-        name: test.name,
-        passed: plan.boxes.length > 0 && plan.unpacked.length === 0,
-        details: plan.boxes.length > 0 ? `${plan.boxes.length} box(es), ${plan.unpacked.length} unpacked` : "No plan produced",
-      };
-    }
-
-    const expectedEntries = Object.entries(test.expect || {});
-    const passed =
-      parsed &&
-      !parsed.error &&
-      expectedEntries.every(([key, expected]) => {
-        const actual = parsed[key];
-        if (typeof actual === "number" && typeof expected === "number") {
-          return Math.abs(actual - expected) < 0.000001;
-        }
-        return actual === expected;
-      });
-
-    return {
-      name: test.name,
-      passed: Boolean(passed),
-      details: passed ? "OK" : `Expected ${JSON.stringify(test.expect)}, got ${JSON.stringify(parsed)}`,
-    };
-  });
-}
-
-function MultiBoxPackingDiagram({ packingPlan, packingMethod, onPackingMethodChange, activePackingMethod }) {
-  const [boxIndex, setBoxIndex] = useState(0);
-
-  if (!packingPlan || !packingPlan.boxes || packingPlan.boxes.length === 0) {
-    return (
-      <Panel className="p-5">
-        <h2 className="mb-2 text-lg font-semibold">2D packing view</h2>
-        <div className="rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">Add rolls to see the scaled top-view packing plan.</div>
-      </Panel>
-    );
-  }
-
-  const safeIndex = Math.min(boxIndex, packingPlan.boxes.length - 1);
-  const current = packingPlan.boxes[safeIndex];
-  const orientation = current.orientation;
-  const placed = current.topViewPlaced || [];
-  const viewW = 820;
-  const viewH = Math.max(260, Math.round((orientation.W / orientation.L) * viewW));
-  const scale = Math.min(viewW / orientation.L, viewH / orientation.W);
-  const svgW = orientation.L * scale;
-  const svgH = orientation.W * scale;
-  const layerViewW = 170;
-  const layerViewH = 220;
-  const layerScaleY = layerViewH / orientation.H;
-  const packingLabel = PACKING_METHOD_LABELS[current.packingMethod || DEFAULT_PACKING_METHOD] || PACKING_METHOD_LABELS[DEFAULT_PACKING_METHOD];
-
-  return (
-    <Panel className="flex h-full min-h-0 flex-col p-3">
-      <div className="mb-2 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h2 className="text-lg font-semibold">2D packing view</h2>
-          <div className="mt-2 w-full max-w-xs">
-            <SelectField label="Packing method" value={packingMethod} onChange={onPackingMethodChange}>
-              <option value="best">Best fit (auto)</option>
-              <option value="standard">Standard grid</option>
-              <option value="offset">Hex / offset rows</option>
-            </SelectField>
-          </div>
-          <p className="text-xs text-slate-600">Use the arrows to view each box setup. Dashed outlines show clearance; solid circles show the actual rolls.</p>
-          {packingMethod === "best" && (
-            <p className="mt-1 text-xs text-slate-500">Auto-selected method: {PACKING_METHOD_LABELS[activePackingMethod || DEFAULT_PACKING_METHOD]}</p>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setBoxIndex((i) => Math.max(0, i - 1))}
-            disabled={safeIndex === 0}
-            className="rounded-xl border border-slate-300 px-3 py-1 text-sm disabled:opacity-40"
-          >
-            Prev

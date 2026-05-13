@@ -1,82 +1,133 @@
+            <Panel className="p-3">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold">Add roll item</h2>
+                <button
+                  type="button"
+                  onClick={clearRollItems}
+                  className="rounded-2xl border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
                 >
-                  Clear entry fields
+                  Clear rolls
                 </button>
-                  </div>
-                </div>
+              </div>
+
+              <div className="grid gap-2.5 sm:grid-cols-2">
+                <NumberField label="Width, in" value={form.width} onChange={(v) => updateForm("width", v)} />
+                <NumberField label="Height, in" value={form.height} onChange={(v) => updateForm("height", v)} />
+                <NumberField label="# of rolls" value={form.rolls} onChange={(v) => updateForm("rolls", v)} step="1" />
+                <NumberField label="Total labels" value={form.totalLabels} onChange={(v) => updateForm("totalLabels", v)} step="1" />
+                <SelectField label="Orientation" value={repeatEdge} onChange={setRepeatEdge}>
+                  <option value="short">Short edge comes off</option>
+                  <option value="long">Long edge comes off</option>
+                </SelectField>
               </div>
 
               {formError && <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{formError}</div>}
+
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={addRollItem}
+                  className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800"
+                >
+                  Add roll item
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForm(EMPTY_FORM);
+                    setFormError("");
+                  }}
+                  className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium shadow-sm hover:bg-slate-50"
+                >
+                  Clear entry fields
+                </button>
+              </div>
             </Panel>
 
             <Panel className="flex min-h-0 flex-col p-3">
-              <div className="flex min-h-0 flex-1 flex-col space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <h2 className="text-lg font-semibold">Roll calculations</h2>
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex rounded-2xl bg-slate-100 p-1">
                   <button
                     type="button"
-                    onClick={clearRollItems}
-                    className="rounded-2xl border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50"
+                    onClick={() => setActiveTab("rolls")}
+                    className={`rounded-xl px-4 py-2 text-sm font-semibold ${activeTab === "rolls" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600 hover:text-slate-950"}`}
                   >
-                    Clear rolls
+                    Roll calculations
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("settings")}
+                    className={`rounded-xl px-4 py-2 text-sm font-semibold ${activeTab === "settings" ? "bg-white text-slate-950 shadow-sm" : "text-slate-600 hover:text-slate-950"}`}
+                  >
+                    Settings
                   </button>
                 </div>
-                <div className="min-h-0 flex-1">
-                  <RollCalculationsTable rolls={result.valid} onRemove={removeRollItem} />
-                </div>
               </div>
+
+              {activeTab === "rolls" ? (
+                <div className="flex min-h-0 flex-1 flex-col space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <h2 className="text-lg font-semibold">Roll calculations</h2>
+                    {result.valid.length > 0 && <Badge good>{result.valid.length} group{result.valid.length === 1 ? "" : "s"}</Badge>}
+                  </div>
+                  <div className="min-h-0 flex-1">
+                    <RollCalculationsTable rolls={result.valid} onRemove={removeRollItem} />
+                  </div>
+                </div>
+              ) : (
+                <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+                  <div className="space-y-5">
+                    <div>
+                      <h2 className="text-lg font-semibold">Settings</h2>
+                      <p className="mt-1 text-sm text-slate-600">These values apply to every roll group in the current order.</p>
+                    </div>
+
+                    <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5">
+                      <NumberField label="Core diameter, in" value={coreDiameter} onChange={setCoreDiameter} step="0.001" />
+                      <NumberField label="Total caliper, mil" value={caliperMil} onChange={setCaliperMil} step="0.1" />
+                      <NumberField label="Clearance, in" value={clearance} onChange={setClearance} step="0.05" />
+                      <NumberField label="Extra amount, %" value={extraPercent} onChange={setExtraPercent} step="0.1" />
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <h3 className="font-semibold">Allowed box sizes</h3>
+                          <p className="mt-1 text-sm text-slate-600">Select one or more box sizes the order can use.</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button type="button" onClick={selectAllBoxes} className="rounded-xl border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">Select all</button>
+                          <button type="button" onClick={clearBoxSelection} className="rounded-xl border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">Clear</button>
+                        </div>
+                      </div>
+                      <div className="max-h-[280px] overflow-y-auto rounded-2xl border bg-white p-3">
+                        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                          {BOXES.map((box) => (
+                            <label key={box.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2 text-sm">
+                              <span>{box.name}</span>
+                              <input
+                                type="checkbox"
+                                checked={selectedBoxIds.includes(box.id)}
+                                onChange={() => toggleBoxSelection(box.id)}
+                                className="h-4 w-4 accent-slate-900"
+                              />
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </Panel>
           </div>
-          {settingsOpen && (
-            <div className="fixed inset-0 z-40 flex items-start justify-end bg-slate-900/30 p-3" onClick={() => setSettingsOpen(false)}>
-              <Panel className="z-50 max-h-[95vh] w-full max-w-2xl overflow-y-auto p-4" onClick={(e) => e.stopPropagation()}>
-                <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-lg font-semibold">Settings</h2>
-                  <button type="button" onClick={() => setSettingsOpen(false)} className="rounded-xl border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">Close</button>
-                </div>
-                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                  <NumberField label="Core diameter, in" value={coreDiameter} onChange={setCoreDiameter} step="0.001" />
-                  <NumberField label="Total caliper, mil" value={caliperMil} onChange={setCaliperMil} step="0.1" />
-                  <NumberField label="Clearance, in" value={clearance} onChange={setClearance} step="0.05" />
-                  <NumberField label="Extra amount, %" value={extraPercent} onChange={setExtraPercent} step="0.1" />
-                </div>
-                <div className="mt-4 space-y-3">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <h3 className="font-semibold">Allowed box sizes</h3>
-                    <div className="flex gap-2">
-                      <button type="button" onClick={selectAllBoxes} className="rounded-xl border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">Select all</button>
-                      <button type="button" onClick={clearBoxSelection} className="rounded-xl border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50">Clear</button>
-                    </div>
-                  </div>
-                  <div className="max-h-[280px] overflow-y-auto rounded-2xl border bg-white p-3">
-                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                      {BOXES.map((box) => (
-                        <label key={box.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2 text-sm">
-                          <span>{box.name}</span>
-                          <input type="checkbox" checked={selectedBoxIds.includes(box.id)} onChange={() => toggleBoxSelection(box.id)} className="h-4 w-4 accent-slate-900" />
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </Panel>
-            </div>
-          )}
 
           <div className="min-w-0 xl:[height:min(68vh,720px)]">
-            <MultiBoxPackingDiagram
-              packingPlan={result.packingPlan}
-              packingMethod={packingMethod}
-              onPackingMethodChange={setPackingMethod}
-              activePackingMethod={result.activePackingMethod}
-            />
+            <MultiBoxPackingDiagram packingPlan={result.packingPlan} />
           </div>
         </div>
 
-        <Panel className="space-y-3 p-3">
-          <div className="flex items-center gap-2 text-lg font-semibold">
-            <span>Shipment plan</span>
-          </div>
-
+        <Panel className="p-3">
           {result.errors.length > 0 && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
               <div className="font-semibold">Fix these roll rows</div>
@@ -88,8 +139,9 @@
             </div>
           )}
 
-          <div className="grid gap-3 xl:grid-cols-[360px_minmax(0,1fr)]">
+          <div className="grid items-start gap-3 xl:grid-cols-[360px_minmax(0,1fr)]">
             <div className="space-y-3">
+              <h2 className="text-lg font-semibold">Shipment plan</h2>
               {result.valid.length === 0 ? (
                 <div className="rounded-2xl bg-slate-100 p-4 text-slate-600">Add at least one valid roll group.</div>
               ) : result.availableBoxes.length === 0 ? (

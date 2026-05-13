@@ -1,6 +1,79 @@
+      </div>
+
+      {packingPlan.unpacked.length > 0 && (
+        <div className="mt-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+          {packingPlan.unpacked.length} roll(s) could not be packed into the available box list.
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function RollCalculationsTable({ rolls, onRemove }) {
+  if (rolls.length === 0) {
+    return <div className="rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">No roll rows yet. Add one above to begin.</div>;
+  }
+
+  return (
+    <div className="h-full overflow-y-auto overflow-x-hidden rounded-2xl border bg-white">
+      <table className="w-full table-fixed text-sm">
+        <thead className="sticky top-0 bg-slate-100 text-left text-xs uppercase tracking-wide text-slate-500">
+          <tr>
+            <th className="p-3">Roll IDs</th>
+            <th className="p-3">Width</th>
+            <th className="p-3">Height</th>
+            <th className="p-3">Core size</th>
+            <th className="p-3">Rolls</th>
+            <th className="p-3">Total quantity</th>
+            <th className="p-3">Labels / roll</th>
+            <th className="p-3">Orientation</th>
+            <th className="p-3">Diameter</th>
+            <th className="p-3">Eff. size</th>
+            <th className="p-3">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rolls.map((roll, groupIndex) => (
+            <tr key={roll.id} className="border-t align-top">
+              <td className="break-words p-3 font-semibold text-slate-700">{getRollLabelRange(groupIndex, roll.rolls)}</td>
+              <td className="p-3">{formatNumber(roll.width)}&quot;</td>
+              <td className="p-3">{formatNumber(roll.height)}&quot;</td>
+              <td className="p-3">{formatNumber(roll.coreSize)}&quot;</td>
+              <td className="p-3">{roll.rolls}</td>
+              <td className="break-words p-3">{roll.totalLabels.toLocaleString()}</td>
+              <td className="break-words p-3">{formatNumber(roll.labelsPerRoll, 0)}</td>
+              <td className="break-words p-3">{roll.repeatEdgeLabel}</td>
+              <td className="p-3 font-semibold">{formatNumber(roll.outerDiameter)}&quot;</td>
+              <td className="break-words p-3">{formatNumber(roll.effectiveDiameter)} x {formatNumber(roll.effectiveHeight)}</td>
+              <td className="p-3">
+                <button
+                  type="button"
+                  onClick={() => onRemove(roll.id)}
+                  className="rounded-xl border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50"
+                >
+                  Remove
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function BoxSummary({ packingPlan }) {
+  if (!packingPlan || packingPlan.boxes.length === 0) {
+    return (
+      <div className="rounded-2xl bg-slate-100 p-4 text-sm text-slate-600">
+        Box summary will appear after you add at least one roll group and select at least one box size.
+      </div>
+    );
+  }
+
   return (
     <div className="max-h-[380px] overflow-y-auto pr-1">
-      <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-4">
+      <div className="grid items-start gap-3 md:grid-cols-2 2xl:grid-cols-4">
         {packingPlan.boxes.map((boxSetup, i) => (
           <div key={i} className="rounded-2xl border border-slate-200 bg-white p-3">
             <div className="flex items-center justify-between gap-3">
@@ -8,10 +81,10 @@
               <Badge good>{boxSetup.placedCount} roll(s)</Badge>
             </div>
             <div className="mt-1 text-xs text-slate-500">
-              Box size: {boxSetup.orientation.L} x {boxSetup.orientation.W} x {boxSetup.orientation.H}
+              Box volume: {formatNumber(boxSetup.orientation.L * boxSetup.orientation.W * boxSetup.orientation.H, 0)} cu/in
             </div>
             <div className="mt-1 text-xs text-slate-500">
-              Packing: {PACKING_METHOD_LABELS[boxSetup.packingMethod || DEFAULT_PACKING_METHOD]}
+              Packing: {getPackingMethodDisplayLabel("best", boxSetup.packingMethod || DEFAULT_PACKING_METHOD)}
             </div>
             <div className="mt-1 text-xs text-slate-500">Layers used: {boxSetup.layers.length}</div>
             <div className="mt-2 space-y-1">
@@ -36,11 +109,10 @@ function LabelRollBoxCalculator() {
   const [caliperMil, setCaliperMil] = useState(DEFAULT_CALIPER_MIL);
   const [clearance, setClearance] = useState(DEFAULT_CLEARANCE);
   const [extraPercent, setExtraPercent] = useState(DEFAULT_EXTRA_PERCENT);
-  const [packingMethod, setPackingMethod] = useState(DEFAULT_PACKING_METHOD);
   const [repeatEdge, setRepeatEdge] = useState(DEFAULT_REPEAT_EDGE);
   const [selectedBoxIds, setSelectedBoxIds] = useState(DEFAULT_SELECTED_BOX_IDS);
+  const [activeTab, setActiveTab] = useState("rolls");
   const [formError, setFormError] = useState("");
-  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const result = useMemo(() => {
     const availableBoxes = BOXES.filter((box) => selectedBoxIds.includes(box.id));
@@ -49,8 +121,7 @@ function LabelRollBoxCalculator() {
     const valid = parsed
       .filter((p) => !p.error)
       .map((p) => calculateRoll(p, Number(coreDiameter), Number(caliperMil), Number(clearance), Number(extraPercent)));
-    const autoPlan = valid.length ? chooseAutoPackingPlan(valid, availableBoxes) : { boxes: [], unpacked: [], selectedPackingMethod: "standard" };
-    const packingPlan = valid.length ? (packingMethod === "best" ? autoPlan : buildMultiBoxPlan(valid, availableBoxes, packingMethod)) : { boxes: [], unpacked: [] };
+    const packingPlan = valid.length ? buildMultiBoxPlan(valid, availableBoxes) : { boxes: [], unpacked: [] };
     const boxMix = summarizeBoxMix(packingPlan.boxes);
     const totalRolls = valid.reduce((sum, r) => sum + r.rolls, 0);
     const totalCylinderVolume = valid.reduce((sum, r) => sum + r.totalCylinderVolume, 0);
@@ -62,13 +133,12 @@ function LabelRollBoxCalculator() {
       valid,
       packingPlan,
       boxMix,
-      activePackingMethod: packingMethod === "best" ? autoPlan.selectedPackingMethod : packingMethod,
       availableBoxes,
       totalRolls,
       totalCylinderVolume,
       totalBoundingVolume,
     };
-  }, [rollItems, coreDiameter, caliperMil, clearance, extraPercent, packingMethod, repeatEdge, selectedBoxIds]);
+  }, [rollItems, coreDiameter, caliperMil, clearance, extraPercent, repeatEdge, selectedBoxIds]);
 
   function updateForm(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -120,43 +190,16 @@ function LabelRollBoxCalculator() {
     <div className="min-h-screen bg-slate-50 p-2 text-slate-900 md:p-3">
       <div className="mx-auto max-w-none space-y-3">
         <header className="rounded-2xl bg-white px-4 py-3 shadow-sm">
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
             <div>
-              <h1 className="text-xl font-semibold tracking-tight md:text-2xl">Label Roll Box Calculator</h1>
+              <div className="text-sm font-semibold text-slate-500">Label Roll Box Calculator v1</div>
+              <h1 className="text-xl font-semibold tracking-tight md:text-2xl">Find the practical box plan for label rolls</h1>
             </div>
-            <button type="button" onClick={() => setSettingsOpen(true)} className="rounded-xl border border-slate-300 p-2 hover:bg-slate-50" aria-label="Open settings">⚙️</button>
+            <p className="max-w-3xl text-xs text-slate-600 md:text-right">
+              Add roll items, calculate diameters, then build a multi-box packing plan.
+            </p>
           </div>
         </header>
 
         <div className="grid gap-3 xl:grid-cols-[minmax(420px,0.95fr)_minmax(0,1.25fr)]">
           <div className="grid gap-3 xl:grid-rows-[350px_minmax(0,1fr)] xl:[height:min(68vh,720px)]">
-            <Panel className="p-3">
-              <div className="mb-2 flex items-center justify-between gap-3">
-                <h2 className="text-lg font-semibold">Add roll item</h2>
-              </div>
-
-              <div className="grid gap-2.5 sm:grid-cols-2">
-                <NumberField label="Width, in" value={form.width} onChange={(v) => updateForm("width", v)} />
-                <NumberField label="Height, in" value={form.height} onChange={(v) => updateForm("height", v)} />
-                <NumberField label="# of rolls" value={form.rolls} onChange={(v) => updateForm("rolls", v)} step="1" />
-                <NumberField label="Total labels" value={form.totalLabels} onChange={(v) => updateForm("totalLabels", v)} step="1" />
-                <div className="sm:col-span-2">
-                  <div className="flex flex-wrap items-end gap-2">
-                    <SelectField label="Orientation" value={repeatEdge} onChange={setRepeatEdge}>
-                      <option value="short">Short edge comes off</option>
-                      <option value="long">Long edge comes off</option>
-                    </SelectField>
-                    <button
-                      type="button"
-                      onClick={addRollItem}
-                      className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800"
-                    >
-                      Add roll item
-                    </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setForm(EMPTY_FORM);
-                    setFormError("");
-                  }}
-                  className="rounded-2xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium shadow-sm hover:bg-slate-50"
