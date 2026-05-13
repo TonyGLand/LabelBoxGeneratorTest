@@ -28,7 +28,7 @@ function calculateRoll(item, coreDiameter, caliperMil, clearance, extraPercent =
   const woundLength = repeatPitch * effectiveLabelsPerRoll;
   const outerDiameter = Math.sqrt(safeCoreDiameter ** 2 + (4 * woundLength * caliperInches) / Math.PI);
   const effectiveDiameter = outerDiameter + safeClearance;
-  const effectiveHeight = item.rollHeight + safeClearance;
+  const effectiveHeight = item.rollHeight;
   const cylinderVolume = Math.PI * (outerDiameter / 2) ** 2 * item.rollHeight;
   const boundingVolume = effectiveDiameter * effectiveDiameter * effectiveHeight;
 
