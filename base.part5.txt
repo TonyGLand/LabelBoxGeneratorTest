@@ -149,7 +149,7 @@ function LabelRollBoxCalculator() {
                 <NumberField label="Width, in" value={form.width} onChange={(v) => updateForm("width", v)} />
                 <NumberField label="Height, in" value={form.height} onChange={(v) => updateForm("height", v)} />
                 <NumberField label="# of rolls" value={form.rolls} onChange={(v) => updateForm("rolls", v)} step="1" />
-                <NumberField label="Labels / roll" value={form.labelsPerRoll} onChange={(v) => updateForm("labelsPerRoll", v)} step="1" />
+                <NumberField label="Total labels" value={form.totalLabels} onChange={(v) => updateForm("totalLabels", v)} step="1" />
                 <SelectField label="Orientation" value={repeatEdge} onChange={setRepeatEdge}>
                   <option value="short">Short edge comes off</option>
                   <option value="long">Long edge comes off</option>
