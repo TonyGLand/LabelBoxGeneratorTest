@@ -22,7 +22,7 @@ This repository is designed to deploy directly from the `main` branch root.
 Live site:
 
 ```text
-https://tonygland.github.io/LabelBoxGeneratortest/
+https://tonygland.github.io/LabelBoxGeneratorTest/
 ```
 
 ## Local Run
