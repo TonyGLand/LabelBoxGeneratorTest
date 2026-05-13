@@ -1,10 +1,10 @@
 const { useMemo, useState } = React;
 
-const DEFAULT_CORE_DIAMETER = 3.025;
-const DEFAULT_CALIPER_MIL = 5.8;
+const DEFAULT_CORE_DIAMETER = 3.25;
+const DEFAULT_CALIPER_MIL = 6.2;
 const DEFAULT_CLEARANCE = 0.25;
 const DEFAULT_EXTRA_PERCENT = 5;
-const DEFAULT_LABEL_GAP = 0.25;
+const DEFAULT_LABEL_GAP = 0;
 const DEFAULT_CORE_HEIGHT_OVERHANG = 0.5;
 const DEFAULT_REPEAT_EDGE = "short";
 const DEFAULT_PACKING_METHOD = "standard";
@@ -245,7 +245,51 @@ function expandRollInstances(rollGroups) {
   return instances.sort((a, b) => b.diameter - a.diameter);
 }
 
+function centerPlacedInOrientation(placed, orientation) {
+  if (!placed.length) return placed;
+  const minX = Math.min(...placed.map((roll) => roll.x - roll.r));
+  const maxX = Math.max(...placed.map((roll) => roll.x + roll.r));
+  const minY = Math.min(...placed.map((roll) => roll.y - roll.r));
+  const maxY = Math.max(...placed.map((roll) => roll.y + roll.r));
+  const offsetX = (orientation.L - (maxX - minX)) / 2 - minX;
+  const offsetY = (orientation.W - (maxY - minY)) / 2 - minY;
+  return placed.map((roll) => ({ ...roll, x: roll.x + offsetX, y: roll.y + offsetY }));
+}
+
 function packLayerStandard(instances, orientation, remainingHeight) {
+  const eligible = instances.filter((roll) => roll.height <= remainingHeight && roll.diameter <= orientation.L && roll.diameter <= orientation.W);
+  if (eligible.length >= 3) {
+    const firstThree = eligible.slice(0, 3);
+    const sameDiameter = firstThree.every((roll) => Math.abs(roll.diameter - firstThree[0].diameter) < 1e-6);
+    if (sameDiameter) {
+      const d = firstThree[0].diameter;
+      const leftX = d / 2;
+      const rightX = orientation.L - d / 2;
+      const topY = d / 2;
+      const middleX = orientation.L / 2;
+      const middleY = orientation.W - d / 2;
+      const withinBounds =
+        rightX - leftX >= d - 1e-9 &&
+        middleY - topY >= d - 1e-9 &&
+        leftX >= d / 2 - 1e-9 &&
+        rightX <= orientation.L - d / 2 + 1e-9 &&
+        middleY <= orientation.W - d / 2 + 1e-9;
+
+      if (withinBounds) {
+        const rawPlacements = [
+          { ...firstThree[0], x: leftX, y: topY, r: d / 2 },
+          { ...firstThree[1], x: rightX, y: topY, r: d / 2 },
+          { ...firstThree[2], x: middleX, y: middleY, r: d / 2 },
+        ];
+        const placed = centerPlacedInOrientation(rawPlacements, orientation);
+        const placedIds = new Set(placed.map((roll) => roll.id));
+        const remaining = instances.filter((roll) => !placedIds.has(roll.id));
+        const layerHeight = Math.max(...placed.map((roll) => roll.height));
+        return { placed, remaining, layerHeight };
+      }
+    }
+  }
+
   const placed = [];
   const placedIds = new Set();
   let cursorX = 0;
@@ -275,9 +319,10 @@ function packLayerStandard(instances, orientation, remainingHeight) {
     }
   }
 
+  const centeredPlaced = centerPlacedInOrientation(placed, orientation);
   const remaining = instances.filter((roll) => !placedIds.has(roll.id));
-  const layerHeight = placed.length ? Math.max(...placed.map((roll) => roll.height)) : 0;
-  return { placed, remaining, layerHeight };
+  const layerHeight = centeredPlaced.length ? Math.max(...centeredPlaced.map((roll) => roll.height)) : 0;
+  return { placed: centeredPlaced, remaining, layerHeight };
 }
 
 function packLayerOffset(instances, orientation, remainingHeight) {
@@ -310,9 +355,10 @@ function packLayerOffset(instances, orientation, remainingHeight) {
     centerY = slotD / 2 + rowIndex * rowStep;
   }
 
+  const centeredPlaced = centerPlacedInOrientation(placed, orientation);
   const remaining = instances.filter((roll) => !placedIds.has(roll.id));
-  const layerHeight = placed.length ? Math.max(...placed.map((roll) => roll.height)) : 0;
-  return { placed, remaining, layerHeight };
+  const layerHeight = centeredPlaced.length ? Math.max(...centeredPlaced.map((roll) => roll.height)) : 0;
+  return { placed: centeredPlaced, remaining, layerHeight };
 }
 
 function packLayer(instances, orientation, remainingHeight, packingMethod = DEFAULT_PACKING_METHOD) {
