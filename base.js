@@ -285,6 +285,35 @@ function buildCandidateCenters(placed, orientation, radius, epsilon = 1e-6) {
     );
   });
 
+  for (let i = 0; i < placed.length; i += 1) {
+    for (let j = i + 1; j < placed.length; j += 1) {
+      const a = placed[i];
+      const b = placed[j];
+      const targetA = radius + a.r;
+      const targetB = radius + b.r;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const centerDistance = Math.hypot(dx, dy);
+      if (centerDistance < epsilon) continue;
+      if (centerDistance > targetA + targetB + epsilon) continue;
+      if (centerDistance < Math.abs(targetA - targetB) - epsilon) continue;
+
+      const axis = (targetA ** 2 - targetB ** 2 + centerDistance ** 2) / (2 * centerDistance);
+      const perpendicularSquared = targetA ** 2 - axis ** 2;
+      if (perpendicularSquared < -epsilon) continue;
+
+      const perpendicular = Math.sqrt(Math.max(0, perpendicularSquared));
+      const ux = dx / centerDistance;
+      const uy = dy / centerDistance;
+      const baseX = a.x + axis * ux;
+      const baseY = a.y + axis * uy;
+      candidates.push(
+        { x: baseX + perpendicular * -uy, y: baseY + perpendicular * ux },
+        { x: baseX - perpendicular * -uy, y: baseY - perpendicular * ux },
+      );
+    }
+  }
+
   const seen = new Set();
   return candidates.filter((point) => {
     if (point.x < radius - epsilon || point.x > orientation.L - radius + epsilon) return false;
