@@ -11,6 +11,7 @@
     coreHeightOverhang: DEFAULT_CORE_HEIGHT_OVERHANG,
     rollHeight,
     rolls,
+    totalLabels,
     labelsPerRoll,
     description: `${formatNumber(width)} x ${formatNumber(height)} - ${REPEAT_EDGE_LABELS[repeatEdge].toLowerCase()} orientation, ${rolls} roll${rolls === 1 ? "" : "s"}, ${totalLabels.toLocaleString()} total labels (${labelsPerRoll.toLocaleString(undefined, { maximumFractionDigits: 2 })} labels/roll)`,
   };
