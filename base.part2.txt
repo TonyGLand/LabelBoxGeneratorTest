@@ -85,33 +85,106 @@ function centerPlacedInBox(placed, orientation) {
   return placed.map((roll) => ({ ...roll, x: roll.x + offsetX, y: roll.y + offsetY }));
 }
 
+
+function buildCandidateCenters(placed, orientation, radius, epsilon = 1e-6) {
+  const candidates = [
+    { x: radius, y: radius },
+    { x: orientation.L - radius, y: radius },
+    { x: radius, y: orientation.W - radius },
+    { x: orientation.L - radius, y: orientation.W - radius },
+    { x: orientation.L / 2, y: orientation.W / 2 },
+  ];
+
+  placed.forEach((other) => {
+    const target = radius + other.r;
+    const dx = target;
+    const dySquared = target ** 2 - dx ** 2;
+    const dy = dySquared > 0 ? Math.sqrt(dySquared) : 0;
+    candidates.push(
+      { x: other.x + dx, y: other.y + dy },
+      { x: other.x + dx, y: other.y - dy },
+      { x: other.x - dx, y: other.y + dy },
+      { x: other.x - dx, y: other.y - dy },
+      { x: radius, y: other.y },
+      { x: orientation.L - radius, y: other.y },
+      { x: other.x, y: radius },
+      { x: other.x, y: orientation.W - radius },
+    );
+  });
+
+  for (let i = 0; i < placed.length; i += 1) {
+    for (let j = i + 1; j < placed.length; j += 1) {
+      const a = placed[i];
+      const b = placed[j];
+      const targetA = radius + a.r;
+      const targetB = radius + b.r;
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const centerDistance = Math.hypot(dx, dy);
+      if (centerDistance < epsilon) continue;
+      if (centerDistance > targetA + targetB + epsilon) continue;
+      if (centerDistance < Math.abs(targetA - targetB) - epsilon) continue;
+      const axis = (targetA ** 2 - targetB ** 2 + centerDistance ** 2) / (2 * centerDistance);
+      const perpendicularSquared = targetA ** 2 - axis ** 2;
+      if (perpendicularSquared < -epsilon) continue;
+      const perpendicular = Math.sqrt(Math.max(0, perpendicularSquared));
+      const ux = dx / centerDistance;
+      const uy = dy / centerDistance;
+      const baseX = a.x + axis * ux;
+      const baseY = a.y + axis * uy;
+      candidates.push(
+        { x: baseX + perpendicular * -uy, y: baseY + perpendicular * ux },
+        { x: baseX - perpendicular * -uy, y: baseY - perpendicular * ux },
+      );
+    }
+  }
+
+  const seen = new Set();
+  return candidates.filter((point) => {
+    if (point.x < radius - epsilon || point.x > orientation.L - radius + epsilon) return false;
+    if (point.y < radius - epsilon || point.y > orientation.W - radius + epsilon) return false;
+    const key = `${Math.round(point.x * 1000)}:${Math.round(point.y * 1000)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function canPlaceAt(point, radius, placed, epsilon = 1e-6) {
+  return placed.every((other) => {
+    const minDist = radius + other.r - epsilon;
+    const dist = Math.hypot(point.x - other.x, point.y - other.y);
+    return dist >= minDist;
+  });
+}
+
 function packLayerStandard(instances, orientation, remainingHeight) {
+  const eligible = instances.filter((roll) => roll.height <= remainingHeight && roll.diameter <= orientation.L && roll.diameter <= orientation.W);
+  if (!eligible.length) return { placed: [], remaining: instances, layerHeight: 0 };
+
   const placed = [];
   const placedIds = new Set();
-  let cursorX = 0;
-  let cursorY = 0;
-  let rowHeight = 0;
 
-  for (const roll of instances) {
-    const d = roll.diameter;
-    if (roll.height > remainingHeight || d > orientation.L || d > orientation.W) continue;
+  for (const roll of eligible) {
+    const radius = roll.diameter / 2;
+    const candidates = buildCandidateCenters(placed, orientation, radius);
+    let bestPoint = null;
+    let bestScore = Number.NEGATIVE_INFINITY;
 
-    if (cursorX + d > orientation.L) {
-      cursorX = 0;
-      cursorY += rowHeight;
-      rowHeight = 0;
+    for (const point of candidates) {
+      if (!canPlaceAt(point, radius, placed)) continue;
+      const nearestWall = Math.min(point.x - radius, orientation.L - radius - point.x, point.y - radius, orientation.W - radius - point.y);
+      const centerBias = -Math.hypot(point.x - orientation.L / 2, point.y - orientation.W / 2);
+      const score = nearestWall * 5 + centerBias;
+      if (score > bestScore) {
+        bestScore = score;
+        bestPoint = point;
+      }
     }
 
-    if (cursorY + d <= orientation.W) {
-      placed.push({
-        ...roll,
-        x: cursorX + d / 2,
-        y: cursorY + d / 2,
-        r: d / 2,
-      });
+    if (bestPoint) {
+      placed.push({ ...roll, x: bestPoint.x, y: bestPoint.y, r: radius });
       placedIds.add(roll.id);
-      cursorX += d;
-      rowHeight = Math.max(rowHeight, d);
     }
   }
 
