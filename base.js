@@ -166,7 +166,9 @@ function normalizeRollInput(item, repeatEdgeChoice = item.repeatEdge || DEFAULT_
   const longEdge = Math.max(width, height);
   const labelHeight = repeatEdge === "long" ? longEdge : shortEdge;
   const repeat = repeatEdge === "long" ? shortEdge : longEdge;
-  const rollHeight = labelHeight + DEFAULT_CORE_HEIGHT_OVERHANG;
+  const coreSizeBase = repeat + 0.25;
+  const coreSize = Math.round(coreSizeBase * 2) / 2;
+  const rollHeight = coreSize;
   const repeatPitch = repeat + DEFAULT_LABEL_GAP;
 
   return {
@@ -182,6 +184,7 @@ function normalizeRollInput(item, repeatEdgeChoice = item.repeatEdge || DEFAULT_
     labelGap: DEFAULT_LABEL_GAP,
     labelHeight,
     coreHeightOverhang: DEFAULT_CORE_HEIGHT_OVERHANG,
+    coreSize,
     rollHeight,
     rolls,
     labelsPerRoll,
@@ -708,6 +711,7 @@ function RollCalculationsTable({ rolls, onRemove }) {
             <th className="p-3">Roll IDs</th>
             <th className="p-3">Width</th>
             <th className="p-3">Height</th>
+            <th className="p-3">Core size</th>
             <th className="p-3">Rolls</th>
             <th className="p-3">Labels / roll</th>
             <th className="p-3">Orientation</th>
@@ -722,6 +726,7 @@ function RollCalculationsTable({ rolls, onRemove }) {
               <td className="break-words p-3 font-semibold text-slate-700">{getRollLabelRange(groupIndex, roll.rolls)}</td>
               <td className="p-3">{formatNumber(roll.width)}&quot;</td>
               <td className="p-3">{formatNumber(roll.height)}&quot;</td>
+              <td className="p-3">{formatNumber(roll.coreSize)}&quot;</td>
               <td className="p-3">{roll.rolls}</td>
               <td className="break-words p-3">{roll.labelsPerRoll.toLocaleString()}</td>
               <td className="break-words p-3">{roll.repeatEdgeLabel}</td>
@@ -755,7 +760,7 @@ function BoxSummary({ packingPlan }) {
 
   return (
     <div className="max-h-[380px] overflow-y-auto pr-1">
-      <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-4">
+      <div className="grid items-start gap-3 md:grid-cols-2 2xl:grid-cols-4">
         {packingPlan.boxes.map((boxSetup, i) => (
           <div key={i} className="rounded-2xl border border-slate-200 bg-white p-3">
             <div className="flex items-center justify-between gap-3">
@@ -763,7 +768,7 @@ function BoxSummary({ packingPlan }) {
               <Badge good>{boxSetup.placedCount} roll(s)</Badge>
             </div>
             <div className="mt-1 text-xs text-slate-500">
-              Box size: {boxSetup.orientation.L} x {boxSetup.orientation.W} x {boxSetup.orientation.H}
+              Box volume: {formatNumber(boxSetup.orientation.L * boxSetup.orientation.W * boxSetup.orientation.H, 0)} cu/in
             </div>
             <div className="mt-1 text-xs text-slate-500">
               Packing: {PACKING_METHOD_LABELS[boxSetup.packingMethod || DEFAULT_PACKING_METHOD]}
@@ -1035,7 +1040,7 @@ function LabelRollBoxCalculator() {
             </div>
           )}
 
-          <div className="grid gap-3 xl:grid-cols-[360px_minmax(0,1fr)]">
+          <div className="grid items-start gap-3 xl:grid-cols-[360px_minmax(0,1fr)]">
             <div className="space-y-3">
               {result.valid.length === 0 ? (
                 <div className="rounded-2xl bg-slate-100 p-4 text-slate-600">Add at least one valid roll group.</div>
