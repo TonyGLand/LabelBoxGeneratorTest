@@ -4,7 +4,7 @@ const DEFAULT_CORE_DIAMETER = 3.25;
 const DEFAULT_CALIPER_MIL = 6.2;
 const DEFAULT_CLEARANCE = 0.25;
 const DEFAULT_EXTRA_PERCENT = 5;
-const DEFAULT_LABEL_GAP = 0;
+const DEFAULT_LABEL_GAP = 0.25;
 const DEFAULT_CORE_HEIGHT_OVERHANG = 0.5;
 const DEFAULT_REPEAT_EDGE = "short";
 const DEFAULT_PACKING_METHOD = "compact";
@@ -72,18 +72,18 @@ const TEST_CASES = [
   {
     name: "Short edge orientation uses the opposite edge as repeat length",
     item: { width: 4, height: 3.396, rolls: 2, totalLabels: 1000 },
-    expect: { repeat: 4, repeatPitch: 4, labelHeight: 3.396, rollHeight: 4.5, rolls: 2, totalLabels: 1000, labelsPerRoll: 500 },
+    expect: { repeat: 4, repeatPitch: 4.25, labelHeight: 3.396, rollHeight: 4.5, rolls: 2, totalLabels: 1000, labelsPerRoll: 500 },
   },
   {
     name: "Tall/narrow label uses the opposite edge from orientation",
     item: { width: 2, height: 3, rolls: 4, totalLabels: 4000 },
-    expect: { repeat: 3, repeatPitch: 3, labelHeight: 2, rollHeight: 3.5, rolls: 4, totalLabels: 4000, labelsPerRoll: 1000 },
+    expect: { repeat: 3, repeatPitch: 3.25, labelHeight: 2, rollHeight: 3.5, rolls: 4, totalLabels: 4000, labelsPerRoll: 1000 },
   },
   {
     name: "Long edge orientation uses the short edge as repeat length",
     item: { width: 4, height: 3.396, rolls: 2, totalLabels: 1000 },
     repeatEdge: "long",
-    expect: { repeat: 3.396, repeatPitch: 3.396, labelHeight: 4, rollHeight: 3.5, rolls: 2, totalLabels: 1000, labelsPerRoll: 500 },
+    expect: { repeat: 3.396, repeatPitch: 3.646, labelHeight: 4, rollHeight: 3.5, rolls: 2, totalLabels: 1000, labelsPerRoll: 500 },
   },
   {
     name: "Rejects missing total labels",
