@@ -102,6 +102,18 @@ const TEST_CASES = [
     expectBoxName: "15 x 10 x 4",
   },
   {
+    name: "Eight by 1.7 labels, 4 rolls, 1000 total labels prefers 10 x 10 x 5 over 15 x 10 x 4",
+    item: { width: 8, height: 1.7, rolls: 4, totalLabels: 1000 },
+    expectPackingPlan: true,
+    expectBoxName: "10 x 10 x 5",
+  },
+  {
+    name: "1.5 by 1.5 labels, 4 rolls, 10000 total labels prefers 8 x 8 x 8 over 15 x 10 x 8",
+    item: { width: 1.5, height: 1.5, rolls: 4, totalLabels: 10000 },
+    expectPackingPlan: true,
+    expectBoxName: "8 x 8 x 8",
+  },
+  {
     name: "Large order produces a multi-box plan",
     item: { width: 4, height: 3.396, rolls: 40, totalLabels: 20000 },
     expectPackingPlan: true,
@@ -570,6 +582,22 @@ function chooseBestBoxForRemaining(instances, availableBoxes = BOXES, preferBala
   const candidates = getBoxCandidatesForRemaining(instances, availableBoxes);
   if (!candidates.length) return null;
 
+  const fullFitCandidates = candidates.filter((candidate) => candidate.fillsAllRemaining);
+  if (fullFitCandidates.length) {
+    return fullFitCandidates.reduce((best, candidate) => {
+      if (!best) return candidate;
+      if (candidate.box.volume !== best.box.volume) {
+        return candidate.box.volume < best.box.volume ? candidate : best;
+      }
+      const candidateFootprint = candidate.orientation.L * candidate.orientation.W;
+      const bestFootprint = best.orientation.L * best.orientation.W;
+      if (candidateFootprint !== bestFootprint) {
+        return candidateFootprint < bestFootprint ? candidate : best;
+      }
+      return candidate.orientation.H < best.orientation.H ? candidate : best;
+    }, null);
+  }
+
   let best = null;
   const targetHalf = instances.length / 2;
 
@@ -671,10 +699,14 @@ function runTests() {
       }
       const calculated = calculateRoll(parsed, DEFAULT_CORE_DIAMETER, DEFAULT_CALIPER_MIL, DEFAULT_CLEARANCE, DEFAULT_EXTRA_PERCENT);
       const plan = buildMultiBoxPlan([calculated], BOXES);
+      const actualBoxName = plan.boxes[0]?.boxName;
+      const boxNameMatches = test.expectBoxName ? actualBoxName === test.expectBoxName : true;
       return {
         name: test.name,
-        passed: plan.boxes.length > 0 && plan.unpacked.length === 0,
-        details: plan.boxes.length > 0 ? `${plan.boxes.length} box(es), ${plan.unpacked.length} unpacked` : "No plan produced",
+        passed: plan.boxes.length > 0 && plan.unpacked.length === 0 && boxNameMatches,
+        details: plan.boxes.length > 0
+          ? `${plan.boxes.length} box(es), ${plan.unpacked.length} unpacked${test.expectBoxName ? `, selected ${actualBoxName}` : ""}`
+          : "No plan produced",
       };
     }
 
