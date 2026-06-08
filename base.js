@@ -70,20 +70,22 @@ const EMPTY_FORM = {
 
 const TEST_CASES = [
   {
-    name: "Short edge orientation uses the opposite edge as repeat length",
+    name: "Short edge orientation uses the short edge as repeat length",
     item: { width: 4, height: 3.396, rolls: 2, totalLabels: 1000 },
-    expect: { repeat: 4, repeatPitch: 4.25, labelHeight: 3.396, rollHeight: 4.5, rolls: 2, totalLabels: 1000, labelsPerRoll: 500 },
+    expect: { repeat: 3.396, repeatPitch: 3.646, labelHeight: 4, rollHeight: 4.5, rolls: 2, totalLabels: 1000, labelsPerRoll: 500 },
+    expectCalculated: { effectiveLabelsPerRoll: 525, woundLength: 1914.15 },
   },
   {
-    name: "Tall/narrow label uses the opposite edge from orientation",
+    name: "Tall/narrow short-edge orientation uses the short edge as repeat length",
     item: { width: 2, height: 3, rolls: 4, totalLabels: 4000 },
-    expect: { repeat: 3, repeatPitch: 3.25, labelHeight: 2, rollHeight: 3.5, rolls: 4, totalLabels: 4000, labelsPerRoll: 1000 },
+    expect: { repeat: 2, repeatPitch: 2.25, labelHeight: 3, rollHeight: 3.5, rolls: 4, totalLabels: 4000, labelsPerRoll: 1000 },
   },
   {
-    name: "Long edge orientation uses the short edge as repeat length",
+    name: "Long edge orientation uses the long edge as repeat length",
     item: { width: 4, height: 3.396, rolls: 2, totalLabels: 1000 },
     repeatEdge: "long",
-    expect: { repeat: 3.396, repeatPitch: 3.646, labelHeight: 4, rollHeight: 3.5, rolls: 2, totalLabels: 1000, labelsPerRoll: 500 },
+    expect: { repeat: 4, repeatPitch: 4.25, labelHeight: 3.396, rollHeight: 3.896, rolls: 2, totalLabels: 1000, labelsPerRoll: 500 },
+    expectCalculated: { effectiveLabelsPerRoll: 525, woundLength: 2231.25 },
   },
   {
     name: "Rejects missing total labels",
@@ -102,16 +104,16 @@ const TEST_CASES = [
     expectBoxName: "15 x 10 x 4",
   },
   {
-    name: "Eight by 1.7 labels, 4 rolls, 1000 total labels prefers 10 x 10 x 5 over 15 x 10 x 4",
+    name: "Eight by 1.7 labels, 4 rolls, 1000 total labels packs all rolls",
     item: { width: 8, height: 1.7, rolls: 4, totalLabels: 1000 },
     expectPackingPlan: true,
-    expectBoxName: "10 x 10 x 5",
+    expectBoxName: "15 x 10 x 8",
   },
   {
-    name: "1.5 by 1.5 labels, 4 rolls, 10000 total labels prefers 8 x 8 x 8 over 15 x 10 x 8",
+    name: "1.5 by 1.5 labels, 4 rolls, 10000 total labels packs all rolls",
     item: { width: 1.5, height: 1.5, rolls: 4, totalLabels: 10000 },
     expectPackingPlan: true,
-    expectBoxName: "8 x 8 x 8",
+    expectBoxName: "15 x 10 x 8",
   },
   {
     name: "Large order produces a multi-box plan",
@@ -200,12 +202,12 @@ function normalizeRollInput(item, repeatEdgeChoice = item.repeatEdge || DEFAULT_
 
   const shortEdge = Math.min(width, height);
   const longEdge = Math.max(width, height);
-  const labelHeight = repeatEdge === "long" ? longEdge : shortEdge;
-  const repeat = repeatEdge === "long" ? shortEdge : longEdge;
-  const coreSizeBase = repeat + 0.25;
-  const coreSize = Math.round(coreSizeBase * 2) / 2;
-  const rollHeight = coreSize;
+  // The selected orientation is the label edge that repeats around the roll.
+  // The opposite edge becomes the roll/core height across the web.
+  const repeat = repeatEdge === "long" ? longEdge : shortEdge;
+  const labelHeight = repeatEdge === "long" ? shortEdge : longEdge;
   const repeatPitch = repeat + DEFAULT_LABEL_GAP;
+  const rollHeight = labelHeight + DEFAULT_CORE_HEIGHT_OVERHANG;
 
   return {
     id: item.id,
@@ -220,7 +222,7 @@ function normalizeRollInput(item, repeatEdgeChoice = item.repeatEdge || DEFAULT_
     labelGap: DEFAULT_LABEL_GAP,
     labelHeight,
     coreHeightOverhang: DEFAULT_CORE_HEIGHT_OVERHANG,
-    coreSize,
+    coreSize: rollHeight,
     rollHeight,
     rolls,
     totalLabels,
@@ -711,7 +713,7 @@ function runTests() {
     }
 
     const expectedEntries = Object.entries(test.expect || {});
-    const passed =
+    const parsedMatches =
       parsed &&
       !parsed.error &&
       expectedEntries.every(([key, expected]) => {
@@ -722,10 +724,27 @@ function runTests() {
         return actual === expected;
       });
 
+    const calculated = parsedMatches && test.expectCalculated
+      ? calculateRoll(parsed, DEFAULT_CORE_DIAMETER, DEFAULT_CALIPER_MIL, DEFAULT_CLEARANCE, DEFAULT_EXTRA_PERCENT)
+      : null;
+    const calculatedMatches = !test.expectCalculated || (
+      calculated &&
+      Object.entries(test.expectCalculated).every(([key, expected]) => {
+        const actual = calculated[key];
+        if (typeof actual === "number" && typeof expected === "number") {
+          return Math.abs(actual - expected) < 0.000001;
+        }
+        return actual === expected;
+      })
+    );
+    const passed = Boolean(parsedMatches && calculatedMatches);
+
     return {
       name: test.name,
-      passed: Boolean(passed),
-      details: passed ? "OK" : `Expected ${JSON.stringify(test.expect)}, got ${JSON.stringify(parsed)}`,
+      passed,
+      details: passed
+        ? "OK"
+        : `Expected ${JSON.stringify({ ...test.expect, calculated: test.expectCalculated })}, got ${JSON.stringify({ ...parsed, calculated })}`,
     };
   });
 }
