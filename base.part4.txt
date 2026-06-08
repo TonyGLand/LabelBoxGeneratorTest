@@ -1,3 +1,22 @@
+      packingMethod: DEFAULT_PACKING_METHOD,
+    });
+
+    remaining = best.remaining;
+  }
+
+  return { boxes, unpacked: remaining, selectedPackingMethod: DEFAULT_PACKING_METHOD };
+}
+
+function summarizeBoxMix(boxes) {
+  const counts = new Map();
+  boxes.forEach((boxSetup) => {
+    counts.set(boxSetup.boxName, (counts.get(boxSetup.boxName) || 0) + 1);
+  });
+
+  return Array.from(counts.entries()).map(([boxName, count]) => ({ boxName, count }));
+}
+
+function summarizeLayerRollLabels(rolls) {
   const counts = new Map();
   rolls.forEach((roll) => {
     counts.set(roll.label, (counts.get(roll.label) || 0) + 1);
@@ -26,15 +45,19 @@ function runTests() {
       }
       const calculated = calculateRoll(parsed, DEFAULT_CORE_DIAMETER, DEFAULT_CALIPER_MIL, DEFAULT_CLEARANCE, DEFAULT_EXTRA_PERCENT);
       const plan = buildMultiBoxPlan([calculated], BOXES);
+      const actualBoxName = plan.boxes[0]?.boxName;
+      const boxNameMatches = test.expectBoxName ? actualBoxName === test.expectBoxName : true;
       return {
         name: test.name,
-        passed: plan.boxes.length > 0 && plan.unpacked.length === 0,
-        details: plan.boxes.length > 0 ? `${plan.boxes.length} box(es), ${plan.unpacked.length} unpacked` : "No plan produced",
+        passed: plan.boxes.length > 0 && plan.unpacked.length === 0 && boxNameMatches,
+        details: plan.boxes.length > 0
+          ? `${plan.boxes.length} box(es), ${plan.unpacked.length} unpacked${test.expectBoxName ? `, selected ${actualBoxName}` : ""}`
+          : "No plan produced",
       };
     }
 
     const expectedEntries = Object.entries(test.expect || {});
-    const passed =
+    const parsedMatches =
       parsed &&
       !parsed.error &&
       expectedEntries.every(([key, expected]) => {
@@ -45,10 +68,27 @@ function runTests() {
         return actual === expected;
       });
 
+    const calculated = parsedMatches && test.expectCalculated
+      ? calculateRoll(parsed, DEFAULT_CORE_DIAMETER, DEFAULT_CALIPER_MIL, DEFAULT_CLEARANCE, DEFAULT_EXTRA_PERCENT)
+      : null;
+    const calculatedMatches = !test.expectCalculated || (
+      calculated &&
+      Object.entries(test.expectCalculated).every(([key, expected]) => {
+        const actual = calculated[key];
+        if (typeof actual === "number" && typeof expected === "number") {
+          return Math.abs(actual - expected) < 0.000001;
+        }
+        return actual === expected;
+      })
+    );
+    const passed = Boolean(parsedMatches && calculatedMatches);
+
     return {
       name: test.name,
-      passed: Boolean(passed),
-      details: passed ? "OK" : `Expected ${JSON.stringify(test.expect)}, got ${JSON.stringify(parsed)}`,
+      passed,
+      details: passed
+        ? "OK"
+        : `Expected ${JSON.stringify({ ...test.expect, calculated: test.expectCalculated })}, got ${JSON.stringify({ ...parsed, calculated })}`,
     };
   });
 }
@@ -176,30 +216,3 @@ function MultiBoxPackingDiagram({ packingPlan }) {
               <svg width={layerViewW} height={layerViewH} viewBox={`0 0 ${layerViewW} ${layerViewH}`} className="mx-auto bg-white">
                 <rect x="0" y="0" width={layerViewW} height={layerViewH} fill="white" stroke="currentColor" strokeWidth="2" className="text-slate-800" />
                 {current.layers.map((layer, index) => {
-                  const layerHeight = Math.max(layer.layerHeight * layerScaleY, 6);
-                  const y = layerViewH - current.layers.slice(0, index + 1).reduce((sum, l) => sum + l.layerHeight * layerScaleY, 0);
-                  return (
-                    <g key={index}>
-                      <rect
-                        x="8"
-                        y={Math.max(0, y)}
-                        width={layerViewW - 16}
-                        height={layerHeight}
-                        fill="rgb(226 232 240)"
-                        stroke="rgb(51 65 85)"
-                        strokeWidth="1"
-                      />
-                      <text x={layerViewW / 2} y={Math.max(12, y + layerHeight / 2 + 4)} textAnchor="middle" className="fill-slate-700 text-[10px] font-semibold">
-                        Layer {index + 1}: {layer.placed.length} roll{layer.placed.length === 1 ? "" : "s"}
-                      </text>
-                      {usesPadSeparator && index < current.layers.length - 1 && (
-                        <line x1="8" y1={Math.max(0, y)} x2={layerViewW - 8} y2={Math.max(0, y)} stroke="black" strokeWidth="2" />
-                      )}
-                    </g>
-                  );
-                })}
-              </svg>
-              <div className="mt-2 text-center text-xs text-slate-600">Side view of stacked layers.</div>
-            </div>
-          </div>
-        </div>

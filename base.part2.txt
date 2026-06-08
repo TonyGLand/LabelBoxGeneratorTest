@@ -1,9 +1,10 @@
+    repeatEdgeLabel: REPEAT_EDGE_LABELS[repeatEdge],
     repeat,
     repeatPitch,
     labelGap: DEFAULT_LABEL_GAP,
     labelHeight,
     coreHeightOverhang: DEFAULT_CORE_HEIGHT_OVERHANG,
-    coreSize,
+    coreSize: rollHeight,
     rollHeight,
     rolls,
     totalLabels,
@@ -62,10 +63,14 @@ function expandRollInstances(rollGroups) {
         diameter: group.effectiveDiameter,
         actualDiameter: group.outerDiameter,
         height: group.effectiveHeight,
+        labelsPerRoll: group.labelsPerRoll,
       });
     }
   });
-  return instances.sort((a, b) => b.diameter - a.diameter);
+  return instances.sort((a, b) => {
+    if (b.labelsPerRoll !== a.labelsPerRoll) return b.labelsPerRoll - a.labelsPerRoll;
+    return b.diameter - a.diameter;
+  });
 }
 
 function centerPlacedInOrientation(placed, orientation) {
@@ -203,3 +208,12 @@ function countFuturePlacements(remainingRolls, seededPlaced, orientation) {
       ) {
         bestArea = bounds.area;
         bestWallBias = wallBias;
+        bestPoint = point;
+      }
+    }
+
+    if (bestPoint) {
+      placed.push({ ...roll, x: bestPoint.x, y: bestPoint.y, r: radius });
+      count += 1;
+    }
+  }

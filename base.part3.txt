@@ -1,12 +1,3 @@
-        bestPoint = point;
-      }
-    }
-
-    if (bestPoint) {
-      placed.push({ ...roll, x: bestPoint.x, y: bestPoint.y, r: radius });
-      count += 1;
-    }
-  }
 
   return count;
 }
@@ -111,9 +102,9 @@ function packBox(instances, orientation) {
   };
 }
 
-function chooseBestBoxForRemaining(instances, availableBoxes = BOXES) {
-  if (!instances.length) return null;
-  let best = null;
+function getBoxCandidatesForRemaining(instances, availableBoxes = BOXES) {
+  if (!instances.length) return [];
+  const candidates = [];
 
   for (const box of availableBoxes) {
     const permutations = [
@@ -135,7 +126,7 @@ function chooseBestBoxForRemaining(instances, availableBoxes = BOXES) {
       const packed = packBox(instances, orientation);
       if (packed.placedCount === 0) continue;
 
-      const candidate = {
+      candidates.push({
         box,
         boxName: box.name,
         orientation,
@@ -145,20 +136,61 @@ function chooseBestBoxForRemaining(instances, availableBoxes = BOXES) {
         fillsAllRemaining: packed.placedCount === instances.length,
         remaining: packed.remaining,
         packingMethod: packed.packingMethod,
-      };
+      });
+    }
+  }
 
+  return candidates;
+}
+
+function chooseBestBoxForRemaining(instances, availableBoxes = BOXES, preferBalancedSplit = false) {
+  const candidates = getBoxCandidatesForRemaining(instances, availableBoxes);
+  if (!candidates.length) return null;
+
+  const fullFitCandidates = candidates.filter((candidate) => candidate.fillsAllRemaining);
+  if (fullFitCandidates.length) {
+    return fullFitCandidates.reduce((best, candidate) => {
+      if (!best) return candidate;
+      if (candidate.box.volume !== best.box.volume) {
+        return candidate.box.volume < best.box.volume ? candidate : best;
+      }
+      const candidateFootprint = candidate.orientation.L * candidate.orientation.W;
+      const bestFootprint = best.orientation.L * best.orientation.W;
+      if (candidateFootprint !== bestFootprint) {
+        return candidateFootprint < bestFootprint ? candidate : best;
+      }
+      return candidate.orientation.H < best.orientation.H ? candidate : best;
+    }, null);
+  }
+
+  let best = null;
+  const targetHalf = instances.length / 2;
+
+  for (const candidate of candidates) {
     if (!best) {
       best = candidate;
       continue;
     }
 
-    const better =
+    const candidateRemainder = instances.length - candidate.placedCount;
+    const bestRemainder = instances.length - best.placedCount;
+
+    const betterByFill =
       (candidate.fillsAllRemaining && !best.fillsAllRemaining) ||
       candidate.placedCount > best.placedCount ||
       (candidate.placedCount === best.placedCount && candidate.box.volume < best.box.volume);
 
-    if (better) best = candidate;
-    }
+    const betterByBalance =
+      preferBalancedSplit &&
+      !candidate.fillsAllRemaining &&
+      !best.fillsAllRemaining &&
+      Math.abs(candidate.placedCount - targetHalf) < Math.abs(best.placedCount - targetHalf);
+
+    const avoidsTinyRemainder =
+      candidateRemainder >= Math.ceil(candidate.placedCount * 0.6) &&
+      bestRemainder < Math.ceil(best.placedCount * 0.6);
+
+    if (betterByBalance || avoidsTinyRemainder || betterByFill) best = candidate;
   }
 
   return best;
@@ -171,7 +203,8 @@ function buildMultiBoxPlan(rollGroups, availableBoxes = BOXES) {
 
   while (remaining.length > 0 && guard < 200) {
     guard += 1;
-    const best = chooseBestBoxForRemaining(remaining, availableBoxes);
+    const preferBalancedSplit = boxes.length === 0 && remaining.length >= 12;
+    const best = chooseBestBoxForRemaining(remaining, availableBoxes, preferBalancedSplit);
 
     if (!best || best.placedCount === 0) {
       return { boxes, unpacked: remaining, selectedPackingMethod: DEFAULT_PACKING_METHOD };
@@ -184,22 +217,3 @@ function buildMultiBoxPlan(rollGroups, availableBoxes = BOXES) {
       layers: best.layers,
       topViewPlaced: best.topViewPlaced,
       placedCount: best.placedCount,
-      packingMethod: DEFAULT_PACKING_METHOD,
-    });
-
-    remaining = best.remaining;
-  }
-
-  return { boxes, unpacked: remaining, selectedPackingMethod: DEFAULT_PACKING_METHOD };
-}
-
-function summarizeBoxMix(boxes) {
-  const counts = new Map();
-  boxes.forEach((boxSetup) => {
-    counts.set(boxSetup.boxName, (counts.get(boxSetup.boxName) || 0) + 1);
-  });
-
-  return Array.from(counts.entries()).map(([boxName, count]) => ({ boxName, count }));
-}
-
-function summarizeLayerRollLabels(rolls) {
